@@ -12,7 +12,7 @@ export const rolePermissions = pgTable(
       .notNull()
       .references(() => permissions.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at'),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.roleId, table.permissionId] }),

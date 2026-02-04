@@ -12,7 +12,7 @@ export const userRoles = pgTable(
       .notNull()
       .references(() => roles.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at'),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.userId, table.roleId] }),

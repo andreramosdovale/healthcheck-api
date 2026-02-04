@@ -6,7 +6,7 @@ export const permissions = pgTable('permissions', {
   description: text('description'),
   group: varchar('group', { length: 50 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 });
 
 export type Permission = typeof permissions.$inferSelect;

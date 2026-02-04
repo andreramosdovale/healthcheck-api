@@ -22,6 +22,13 @@
       "when": 1770232641129,
       "tag": "0002_even_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770234644044,
+      "tag": "0003_short_captain_flint",
+      "breakpoints": true
     }
   ]
 }
