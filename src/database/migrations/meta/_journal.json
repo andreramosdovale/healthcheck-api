@@ -15,6 +15,13 @@
       "when": 1770060056074,
       "tag": "0001_aspiring_typhoid_mary",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770232641129,
+      "tag": "0002_even_polaris",
+      "breakpoints": true
     }
   ]
 }
