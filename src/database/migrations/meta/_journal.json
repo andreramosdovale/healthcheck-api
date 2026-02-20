@@ -36,6 +36,13 @@
       "when": 1771001258060,
       "tag": "0004_spooky_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771618663251,
+      "tag": "0005_chubby_earthquake",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ export * from './permissions';
 export * from './role-permissions';
 export * from './roles';
 export * from './refresh-tokens';
+export * from './measurements';
 
 // N:N
 export * from './user-roles';
