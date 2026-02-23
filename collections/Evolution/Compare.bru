@@ -1,0 +1,20 @@
+meta {
+  name: Compare
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/evolution/compare
+  body: none
+  auth: none
+}
+
+params:query {
+  from:
+  to:
+}
+
+vars:pre-request {
+  baseUrl: local
+}

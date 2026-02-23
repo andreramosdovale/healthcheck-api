@@ -1,0 +1,42 @@
+meta {
+  name: Create Measurement
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/measurements
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "measurementDate": "2026-02-23",
+    "weight": 80.5,
+    "triceps": 12,
+    "subscapular": 14,
+    "chest": 10,
+    "midaxillary": 11,
+    "suprailiac": 13,
+    "abdominal": 20,
+    "thigh": 16,
+    "neck": 38,
+    "shoulders": 110,
+    "chestCirc": 95,
+    "waist": 82,
+    "hip": 98,
+    "leftThigh": 55,
+    "rightThigh": 55,
+    "leftCalf": 38,
+    "rightCalf": 38,
+    "leftBicepRelaxed": 32,
+    "rightBicepRelaxed": 32,
+    "leftBicepFlexed": 34,
+    "rightBicepFlexed": 34
+  }
+}
+
+vars:pre-request {
+  baseUrl: local
+}

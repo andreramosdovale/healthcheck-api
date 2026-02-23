@@ -1,0 +1,19 @@
+meta {
+  name: Summary
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/evolution/summary
+  body: none
+  auth: none
+}
+
+params:query {
+  limit: 30
+}
+
+vars:pre-request {
+  baseUrl: local
+}

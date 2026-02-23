@@ -1,0 +1,19 @@
+meta {
+  name: Get User
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/users/:id
+  body: none
+  auth: none
+}
+
+params:path {
+  id:
+}
+
+vars:pre-request {
+  baseUrl: local
+}

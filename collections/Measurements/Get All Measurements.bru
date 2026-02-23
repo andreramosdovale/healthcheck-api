@@ -1,0 +1,15 @@
+meta {
+  name: Get All Measurements
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/measurements
+  body: none
+  auth: none
+}
+
+vars:pre-request {
+  baseUrl: local
+}

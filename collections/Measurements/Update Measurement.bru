@@ -1,0 +1,26 @@
+meta {
+  name: Update Measurement
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/measurements/:id
+  body: json
+  auth: none
+}
+
+params:path {
+  id:
+}
+
+body:json {
+  {
+    "weight": 79.0,
+    "waist": 80
+  }
+}
+
+vars:pre-request {
+  baseUrl: local
+}

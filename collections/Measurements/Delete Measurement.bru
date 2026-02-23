@@ -1,0 +1,19 @@
+meta {
+  name: Delete Measurement
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/measurements/:id
+  body: none
+  auth: none
+}
+
+params:path {
+  id:
+}
+
+vars:pre-request {
+  baseUrl: local
+}
