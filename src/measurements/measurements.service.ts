@@ -74,17 +74,24 @@ export class MeasurementsService {
     }
 
     const height = parseFloat(user.height);
+    const navyInput = {
+      neck: createMeasurementDto.neck ?? undefined,
+      waist: createMeasurementDto.waist ?? undefined,
+      hip: createMeasurementDto.hip ?? undefined,
+      height,
+    };
+
     const canCalculateNavy =
       user.sex === 'male'
-        ? canCalculateNavyMale({ ...createMeasurementDto, height })
-        : canCalculateNavyFemale({ ...createMeasurementDto, height });
+        ? canCalculateNavyMale(navyInput)
+        : canCalculateNavyFemale(navyInput);
 
     if (canCalculateNavy) {
       const navyResult = calculateNavyBodyFat(
         {
-          neck: createMeasurementDto.neck!,
-          waist: createMeasurementDto.waist!,
-          hip: createMeasurementDto.hip,
+          neck: navyInput.neck!,
+          waist: navyInput.waist!,
+          hip: navyInput.hip,
           height,
         },
         user.sex,
@@ -166,26 +173,115 @@ export class MeasurementsService {
     userId: string,
     updateMeasurementDto: UpdateMeasurementDto,
   ) {
-    await this.findOne(id, userId);
+    const existing = await this.findOne(id, userId);
 
     const [user] = await this.db
       .select()
       .from(users)
       .where(eq(users.id, userId));
 
-    let bodyFatPercentage: number | undefined;
-    let navyBodyFatPercentage: number | undefined;
-    let leanMass: number | undefined;
-    let fatMass: number | undefined;
+    const skinfolds = {
+      triceps: this.mergeNum(updateMeasurementDto.triceps, existing.triceps),
+      subscapular: this.mergeNum(
+        updateMeasurementDto.subscapular,
+        existing.subscapular,
+      ),
+      chest: this.mergeNum(updateMeasurementDto.chest, existing.chest),
+      midaxillary: this.mergeNum(
+        updateMeasurementDto.midaxillary,
+        existing.midaxillary,
+      ),
+      suprailiac: this.mergeNum(
+        updateMeasurementDto.suprailiac,
+        existing.suprailiac,
+      ),
+      abdominal: this.mergeNum(
+        updateMeasurementDto.abdominal,
+        existing.abdominal,
+      ),
+      thigh: this.mergeNum(updateMeasurementDto.thigh, existing.thigh),
+    };
 
-    if (updateMeasurementDto.weight || updateMeasurementDto.triceps) {
-      // TODO: Would need to recalculate - simplified for now, in production, merge with existing data and recalculate
+    const neckMerged = this.mergeNumOrNull(
+      updateMeasurementDto.neck,
+      existing.neck,
+    );
+    const waistMerged = this.mergeNumOrNull(
+      updateMeasurementDto.waist,
+      existing.waist,
+    );
+    const hipMerged = this.mergeNumOrNull(
+      updateMeasurementDto.hip,
+      existing.hip,
+    );
+
+    const mergedDate =
+      updateMeasurementDto.measurementDate ?? existing.measurementDate;
+    const mergedWeight =
+      updateMeasurementDto.weight ?? parseFloat(existing.weight);
+
+    const age = calculateAge(user.birthDate, mergedDate);
+    const height = parseFloat(user.height);
+
+    let bodyFatPercentage: number | null = null;
+    let navyBodyFatPercentage: number | null = null;
+    let leanMass: number | null = null;
+    let fatMass: number | null = null;
+
+    if (hasAllSkinfolds(skinfolds)) {
+      const pollockResult = calculatePollockBodyFat(
+        skinfolds,
+        age,
+        user.sex,
+        mergedWeight,
+      );
+      if (pollockResult) {
+        bodyFatPercentage = pollockResult.bodyFatPercentage;
+        leanMass = pollockResult.leanMass;
+        fatMass = pollockResult.fatMass;
+      }
+    }
+
+    const navyInput = {
+      neck: neckMerged ?? undefined,
+      waist: waistMerged ?? undefined,
+      hip: hipMerged ?? undefined,
+      height,
+    };
+
+    const canNavy =
+      user.sex === 'male'
+        ? canCalculateNavyMale(navyInput)
+        : canCalculateNavyFemale(navyInput);
+
+    if (canNavy) {
+      const navyResult = calculateNavyBodyFat(
+        {
+          neck: navyInput.neck!,
+          waist: navyInput.waist!,
+          hip: navyInput.hip,
+          height,
+        },
+        user.sex,
+        mergedWeight,
+      );
+      if (navyResult) {
+        navyBodyFatPercentage = navyResult.bodyFatPercentage;
+        if (leanMass === null) {
+          leanMass = navyResult.leanMass;
+          fatMass = navyResult.fatMass;
+        }
+      }
     }
 
     const [measurement] = await this.db
       .update(measurements)
       .set({
         ...this.toDbValues(updateMeasurementDto),
+        bodyFatPercentage: bodyFatPercentage?.toString() ?? null,
+        navyBodyFatPercentage: navyBodyFatPercentage?.toString() ?? null,
+        leanMass: leanMass?.toString() ?? null,
+        fatMass: fatMass?.toString() ?? null,
         updatedAt: new Date(),
       })
       .where(and(eq(measurements.id, id), eq(measurements.userId, userId)))
@@ -202,12 +298,39 @@ export class MeasurementsService {
       .where(and(eq(measurements.id, id), eq(measurements.userId, userId)));
   }
 
+  private mergeNum(
+    dtoVal: number | undefined,
+    dbVal: string | null,
+  ): number | undefined {
+    return dtoVal !== undefined
+      ? dtoVal
+      : dbVal !== null
+        ? parseFloat(dbVal)
+        : undefined;
+  }
+
+  private mergeNumOrNull(
+    dtoVal: number | null | undefined,
+    dbVal: string | null,
+  ): number | null {
+    return dtoVal !== undefined
+      ? dtoVal
+      : dbVal !== null
+        ? parseFloat(dbVal)
+        : null;
+  }
+
   private toDbValues(dto: Partial<CreateMeasurementDto>) {
-    const result: Record<string, string | undefined> = {};
+    const result: Record<string, string | null | undefined> = {};
 
     for (const [key, value] of Object.entries(dto)) {
       if (value !== undefined) {
-        result[key] = typeof value === 'number' ? value.toString() : value;
+        result[key] =
+          value === null
+            ? null
+            : typeof value === 'number'
+              ? value.toString()
+              : value;
       }
     }
 
