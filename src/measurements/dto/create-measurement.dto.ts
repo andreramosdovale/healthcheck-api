@@ -59,80 +59,93 @@ export class CreateMeasurementDto {
   thigh?: number;
 
   @IsOptional()
+  @ValidateIf((o) => o.neck !== null)
   @IsNumber({}, { message: 'Neck must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  neck?: number;
+  neck?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.shoulders !== null)
   @IsNumber({}, { message: 'Shoulders must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(200, { message: 'Maximum circumference is 200 cm' })
-  shoulders?: number;
+  shoulders?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.chestCirc !== null)
   @IsNumber({}, { message: 'Chest circumference must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(200, { message: 'Maximum circumference is 200 cm' })
-  chestCirc?: number;
+  chestCirc?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.waist !== null)
   @IsNumber({}, { message: 'Waist must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(200, { message: 'Maximum circumference is 200 cm' })
-  waist?: number;
+  waist?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.hip !== null)
   @IsNumber({}, { message: 'Hip must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(200, { message: 'Maximum circumference is 200 cm' })
-  hip?: number;
+  hip?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.leftThigh !== null)
   @IsNumber({}, { message: 'Left thigh must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  leftThigh?: number;
+  leftThigh?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.rightThigh !== null)
   @IsNumber({}, { message: 'Right thigh must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  rightThigh?: number;
+  rightThigh?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.leftCalf !== null)
   @IsNumber({}, { message: 'Left calf must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  leftCalf?: number;
+  leftCalf?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.rightCalf !== null)
   @IsNumber({}, { message: 'Right calf must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  rightCalf?: number;
+  rightCalf?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.leftBicepRelaxed !== null)
   @IsNumber({}, { message: 'Left bicep relaxed must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  leftBicepRelaxed?: number;
+  leftBicepRelaxed?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.rightBicepRelaxed !== null)
   @IsNumber({}, { message: 'Right bicep relaxed must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  rightBicepRelaxed?: number;
+  rightBicepRelaxed?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.leftBicepFlexed !== null)
   @IsNumber({}, { message: 'Left bicep flexed must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  leftBicepFlexed?: number;
+  leftBicepFlexed?: number | null;
 
   @IsOptional()
+  @ValidateIf((o) => o.rightBicepFlexed !== null)
   @IsNumber({}, { message: 'Right bicep flexed must be a number' })
-  @Min(10, { message: 'Minimum circumference is 10 cm' })
+  @Min(0, { message: 'Minimum circumference is 0 cm' })
   @Max(100, { message: 'Maximum circumference is 100 cm' })
-  rightBicepFlexed?: number;
+  rightBicepFlexed?: number | null;
 }
