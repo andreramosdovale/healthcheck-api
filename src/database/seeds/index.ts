@@ -7,6 +7,7 @@ import { seedPermissions } from './permissions.seed';
 import { seedRolePermissions } from './role-permissions.seed';
 import { seedUsers } from './users.seed';
 import { seedUserRoles } from './user-roles.seed';
+import { seedMeasurements } from './measurements.seed';
 
 const connectionString = process.env.DATABASE_URL!;
 const client = postgres(connectionString);
@@ -20,6 +21,7 @@ async function main() {
   await seedRolePermissions(db, roles, permissions);
   const users = await seedUsers(db);
   await seedUserRoles(db, users, roles);
+  await seedMeasurements(db, users);
 
   console.log('\n🎉 Seed completed!');
   console.log('\n📋 Usuários de teste:');
