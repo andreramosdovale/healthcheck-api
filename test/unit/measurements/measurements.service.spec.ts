@@ -1,70 +1,27 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { MeasurementsService } from '@/measurements/measurements.service';
-import { DRIZZLE } from '@/database/drizzle.module';
+import { MeasurementsRepository } from '@/measurements/measurements.repository';
 import { CreateMeasurementDto } from '@/measurements/dto/create-measurement.dto';
 import { UpdateMeasurementDto } from '@/measurements/dto/update-measurement.dto';
+import {
+  makeMeasurement,
+  makeUserForMeasurement,
+} from '@test/stubs/measurement.stub';
 
 describe('MeasurementsService', () => {
   let service: MeasurementsService;
-  let mockDb: {
-    select: jest.Mock;
-    insert: jest.Mock;
-    update: jest.Mock;
-    delete: jest.Mock;
-  };
 
   const userId = '123e4567-e89b-12d3-a456-426614174000';
   const measurementId = '223e4567-e89b-12d3-a456-426614174001';
 
-  const mockUser = {
-    id: userId,
-    email: 'test@example.com',
-    nickname: 'testuser',
-    passwordHash: 'hashedPassword',
-    name: 'Test User',
-    birthDate: '1990-01-01',
-    sex: 'male' as const,
-    height: '175',
-    plan: 'free' as const,
-    termsAccepted: true,
-    termsAcceptedAt: new Date(),
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: null,
-  };
-
-  const mockMeasurement = {
-    id: measurementId,
-    userId,
-    measurementDate: '2024-01-15',
-    weight: '80.00',
-    triceps: null,
-    subscapular: null,
-    chest: null,
-    midaxillary: null,
-    suprailiac: null,
-    abdominal: null,
-    thigh: null,
-    neck: null,
-    shoulders: null,
-    chestCirc: null,
-    waist: null,
-    hip: null,
-    leftThigh: null,
-    rightThigh: null,
-    leftCalf: null,
-    rightCalf: null,
-    leftBicepRelaxed: null,
-    rightBicepRelaxed: null,
-    leftBicepFlexed: null,
-    rightBicepFlexed: null,
-    bodyFatPercentage: null,
-    navyBodyFatPercentage: null,
-    leanMass: null,
-    fatMass: null,
-    createdAt: new Date(),
-    updatedAt: null,
+  const mockRepository = {
+    findUserById: jest.fn(),
+    findAllByUser: jest.fn(),
+    findById: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
   };
 
   const baseCreateDto: CreateMeasurementDto = {
@@ -83,20 +40,10 @@ describe('MeasurementsService', () => {
   };
 
   beforeEach(async () => {
-    mockDb = {
-      select: jest.fn(),
-      insert: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MeasurementsService,
-        {
-          provide: DRIZZLE,
-          useValue: mockDb,
-        },
+        { provide: MeasurementsRepository, useValue: mockRepository },
       ],
     }).compile();
 
@@ -109,27 +56,18 @@ describe('MeasurementsService', () => {
 
   describe('create', () => {
     it('should create a measurement with weight only', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockUser]),
-      });
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([mockMeasurement]),
-      });
+      const measurement = makeMeasurement();
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+      mockRepository.insert.mockResolvedValue(measurement);
 
       const result = await service.create(userId, baseCreateDto);
 
-      expect(result).toEqual(mockMeasurement);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(measurement);
+      expect(mockRepository.insert).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
-      });
+      mockRepository.findUserById.mockResolvedValue(null);
 
       await expect(service.create(userId, baseCreateDto)).rejects.toThrow(
         NotFoundException,
@@ -140,10 +78,7 @@ describe('MeasurementsService', () => {
     });
 
     it('should throw BadRequestException when only some skinfolds are provided', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockUser]),
-      });
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
       const dtoWithPartialSkinfolds: CreateMeasurementDto = {
         ...baseCreateDto,
@@ -162,191 +97,135 @@ describe('MeasurementsService', () => {
     });
 
     it('should create a measurement with all skinfolds and calculate Pollock body fat for male', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockUser]),
-      });
-
-      const measurementWithSkinfolds = {
-        ...mockMeasurement,
+      const measurement = makeMeasurement({
         ...Object.fromEntries(
           Object.entries(allSkinfolds).map(([k, v]) => [k, v.toString()]),
         ),
         bodyFatPercentage: '14.25',
         leanMass: '68.60',
         fatMass: '11.40',
-      };
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([measurementWithSkinfolds]),
       });
 
-      const dtoWithSkinfolds: CreateMeasurementDto = {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+      mockRepository.insert.mockResolvedValue(measurement);
+
+      const result = await service.create(userId, {
         ...baseCreateDto,
         ...allSkinfolds,
-      };
+      });
 
-      const result = await service.create(userId, dtoWithSkinfolds);
-
-      expect(result).toEqual(measurementWithSkinfolds);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(measurement);
+      expect(mockRepository.insert).toHaveBeenCalled();
     });
 
     it('should create a measurement with all skinfolds and calculate Pollock body fat for female', async () => {
-      const femaleUser = { ...mockUser, sex: 'female' as const };
-
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([femaleUser]),
-      });
-
-      const measurementWithSkinfolds = {
-        ...mockMeasurement,
+      const measurement = makeMeasurement({
         ...Object.fromEntries(
           Object.entries(allSkinfolds).map(([k, v]) => [k, v.toString()]),
         ),
         bodyFatPercentage: '22.10',
         leanMass: '62.32',
         fatMass: '17.68',
-      };
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([measurementWithSkinfolds]),
       });
 
-      const dtoWithSkinfolds: CreateMeasurementDto = {
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'female' }),
+      );
+      mockRepository.insert.mockResolvedValue(measurement);
+
+      const result = await service.create(userId, {
         ...baseCreateDto,
         ...allSkinfolds,
-      };
+      });
 
-      const result = await service.create(userId, dtoWithSkinfolds);
-
-      expect(result).toEqual(measurementWithSkinfolds);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(measurement);
+      expect(mockRepository.insert).toHaveBeenCalled();
     });
 
     it('should calculate Navy body fat for male with neck and waist', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockUser]),
-      });
-
-      const measurementWithNavy = {
-        ...mockMeasurement,
+      const measurement = makeMeasurement({
         neck: '38.00',
         waist: '85.00',
         navyBodyFatPercentage: '18.50',
         leanMass: '65.20',
         fatMass: '14.80',
-      };
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([measurementWithNavy]),
       });
 
-      const dtoWithNavy: CreateMeasurementDto = {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+      mockRepository.insert.mockResolvedValue(measurement);
+
+      const result = await service.create(userId, {
         ...baseCreateDto,
         neck: 38,
         waist: 85,
-      };
+      });
 
-      const result = await service.create(userId, dtoWithNavy);
-
-      expect(result).toEqual(measurementWithNavy);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(measurement);
+      expect(mockRepository.insert).toHaveBeenCalled();
     });
 
     it('should calculate Navy body fat for female with neck, waist, and hip', async () => {
-      const femaleUser = { ...mockUser, sex: 'female' as const };
-
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([femaleUser]),
-      });
-
-      const measurementWithNavy = {
-        ...mockMeasurement,
+      const measurement = makeMeasurement({
         neck: '33.00',
         waist: '72.00',
         hip: '96.00',
         navyBodyFatPercentage: '26.40',
         leanMass: '58.88',
         fatMass: '21.12',
-      };
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([measurementWithNavy]),
       });
 
-      const dtoWithNavy: CreateMeasurementDto = {
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'female' }),
+      );
+      mockRepository.insert.mockResolvedValue(measurement);
+
+      const result = await service.create(userId, {
         ...baseCreateDto,
         neck: 33,
         waist: 72,
         hip: 96,
-      };
+      });
 
-      const result = await service.create(userId, dtoWithNavy);
-
-      expect(result).toEqual(measurementWithNavy);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(measurement);
+      expect(mockRepository.insert).toHaveBeenCalled();
     });
 
     it('should not calculate Navy body fat for female without hip', async () => {
-      const femaleUser = { ...mockUser, sex: 'female' as const };
+      const measurement = makeMeasurement();
 
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([femaleUser]),
-      });
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'female' }),
+      );
+      mockRepository.insert.mockResolvedValue(measurement);
 
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([mockMeasurement]),
-      });
-
-      const dtoWithoutHip: CreateMeasurementDto = {
+      const result = await service.create(userId, {
         ...baseCreateDto,
         neck: 33,
         waist: 72,
-      };
+      });
 
-      const result = await service.create(userId, dtoWithoutHip);
-
-      expect(result).toEqual(mockMeasurement);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(measurement);
+      expect(mockRepository.insert).toHaveBeenCalled();
     });
   });
 
   describe('findAllByUser', () => {
     it('should return all measurements for a user ordered by date', async () => {
       const measurements = [
-        { ...mockMeasurement, measurementDate: '2024-01-15' },
-        { ...mockMeasurement, id: 'another-id', measurementDate: '2024-01-10' },
+        makeMeasurement({ measurementDate: '2024-01-15' }),
+        makeMeasurement({ id: 'another-id', measurementDate: '2024-01-10' }),
       ];
-
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockResolvedValue(measurements),
-      });
+      mockRepository.findAllByUser.mockResolvedValue(measurements);
 
       const result = await service.findAllByUser(userId);
 
       expect(result).toEqual(measurements);
       expect(result).toHaveLength(2);
-      expect(mockDb.select).toHaveBeenCalled();
+      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(userId);
     });
 
     it('should return empty array when user has no measurements', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockResolvedValue([]),
-      });
+      mockRepository.findAllByUser.mockResolvedValue([]);
 
       const result = await service.findAllByUser(userId);
 
@@ -356,23 +235,18 @@ describe('MeasurementsService', () => {
 
   describe('findOne', () => {
     it('should return a measurement by id for the given user', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockMeasurement]),
-      });
+      const measurement = makeMeasurement();
+      mockRepository.findById.mockResolvedValue(measurement);
 
       const result = await service.findOne(measurementId, userId);
 
-      expect(result).toEqual(mockMeasurement);
+      expect(result).toEqual(measurement);
       expect(result.id).toBe(measurementId);
       expect(result.userId).toBe(userId);
     });
 
     it('should throw NotFoundException when measurement not found', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
-      });
+      mockRepository.findById.mockResolvedValue(null);
 
       await expect(service.findOne('non-existent-id', userId)).rejects.toThrow(
         NotFoundException,
@@ -383,10 +257,7 @@ describe('MeasurementsService', () => {
     });
 
     it('should throw NotFoundException when measurement belongs to another user', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
-      });
+      mockRepository.findById.mockResolvedValue(null);
 
       await expect(
         service.findOne(measurementId, 'different-user-id'),
@@ -395,35 +266,22 @@ describe('MeasurementsService', () => {
   });
 
   describe('update', () => {
-    const updateDto: UpdateMeasurementDto = {
-      weight: 82,
-    };
+    const updateDto: UpdateMeasurementDto = { weight: 82 };
 
     it('should update a measurement successfully', async () => {
-      const updatedMeasurement = { ...mockMeasurement, weight: '82.00' };
-
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockMeasurement]),
-      });
-
-      mockDb.update.mockReturnValue({
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([updatedMeasurement]),
-      });
+      const updated = makeMeasurement({ weight: '82.00' });
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+      mockRepository.update.mockResolvedValue(updated);
 
       const result = await service.update(measurementId, userId, updateDto);
 
-      expect(result).toEqual(updatedMeasurement);
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(result).toEqual(updated);
+      expect(mockRepository.update).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when measurement not found', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
-      });
+      mockRepository.findById.mockResolvedValue(null);
 
       await expect(
         service.update('non-existent-id', userId, updateDto),
@@ -433,25 +291,16 @@ describe('MeasurementsService', () => {
 
   describe('remove', () => {
     it('should remove a measurement successfully', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockMeasurement]),
-      });
-
-      mockDb.delete.mockReturnValue({
-        where: jest.fn().mockResolvedValue(undefined),
-      });
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.delete.mockResolvedValue(undefined);
 
       await service.remove(measurementId, userId);
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockRepository.delete).toHaveBeenCalledWith(measurementId, userId);
     });
 
     it('should throw NotFoundException when measurement not found', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
-      });
+      mockRepository.findById.mockResolvedValue(null);
 
       await expect(service.remove('non-existent-id', userId)).rejects.toThrow(
         NotFoundException,

@@ -5,6 +5,7 @@ import { CreateMeasurementDto } from '@/measurements/dto/create-measurement.dto'
 import { UpdateMeasurementDto } from '@/measurements/dto/update-measurement.dto';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
+import { makeMeasurement } from '@test/stubs/measurement.stub';
 
 describe('MeasurementsController', () => {
   let controller: MeasurementsController;
@@ -12,51 +13,14 @@ describe('MeasurementsController', () => {
   const userId = '123e4567-e89b-12d3-a456-426614174000';
   const measurementId = '223e4567-e89b-12d3-a456-426614174001';
 
-  const mockRequest = {
-    user: { id: userId },
-  };
-
-  const mockMeasurement = {
-    id: measurementId,
-    userId,
-    measurementDate: '2024-01-15',
-    weight: '80.00',
-    triceps: null,
-    subscapular: null,
-    chest: null,
-    midaxillary: null,
-    suprailiac: null,
-    abdominal: null,
-    thigh: null,
-    neck: null,
-    shoulders: null,
-    chestCirc: null,
-    waist: null,
-    hip: null,
-    leftThigh: null,
-    rightThigh: null,
-    leftCalf: null,
-    rightCalf: null,
-    leftBicepRelaxed: null,
-    rightBicepRelaxed: null,
-    leftBicepFlexed: null,
-    rightBicepFlexed: null,
-    bodyFatPercentage: null,
-    navyBodyFatPercentage: null,
-    leanMass: null,
-    fatMass: null,
-    createdAt: new Date(),
-    updatedAt: null,
-  };
+  const mockRequest = { user: { id: userId } };
 
   const createDto: CreateMeasurementDto = {
     measurementDate: '2024-01-15',
     weight: 80,
   };
 
-  const updateDto: UpdateMeasurementDto = {
-    weight: 82,
-  };
+  const updateDto: UpdateMeasurementDto = { weight: 82 };
 
   const mockMeasurementsService = {
     create: jest.fn(),
@@ -66,28 +30,17 @@ describe('MeasurementsController', () => {
     remove: jest.fn(),
   };
 
-  const mockJwtAuthGuard = {
-    canActivate: jest.fn(() => true),
-  };
-
-  const mockPermissionsGuard = {
-    canActivate: jest.fn(() => true),
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MeasurementsController],
       providers: [
-        {
-          provide: MeasurementsService,
-          useValue: mockMeasurementsService,
-        },
+        { provide: MeasurementsService, useValue: mockMeasurementsService },
       ],
     })
       .overrideGuard(JwtAuthGuard)
-      .useValue(mockJwtAuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
       .overrideGuard(PermissionsGuard)
-      .useValue(mockPermissionsGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
       .compile();
 
     controller = module.get<MeasurementsController>(MeasurementsController);
@@ -99,11 +52,12 @@ describe('MeasurementsController', () => {
 
   describe('create', () => {
     it('should create a measurement and return it', async () => {
-      mockMeasurementsService.create.mockResolvedValue(mockMeasurement);
+      const measurement = makeMeasurement();
+      mockMeasurementsService.create.mockResolvedValue(measurement);
 
       const result = await controller.create(mockRequest, createDto);
 
-      expect(result).toEqual(mockMeasurement);
+      expect(result).toEqual(measurement);
       expect(mockMeasurementsService.create).toHaveBeenCalledWith(
         userId,
         createDto,
@@ -115,8 +69,8 @@ describe('MeasurementsController', () => {
   describe('findAll', () => {
     it('should return all measurements for the authenticated user', async () => {
       const measurements = [
-        mockMeasurement,
-        { ...mockMeasurement, id: 'another-id' },
+        makeMeasurement(),
+        makeMeasurement({ id: 'another-id' }),
       ];
       mockMeasurementsService.findAllByUser.mockResolvedValue(measurements);
 
@@ -143,11 +97,12 @@ describe('MeasurementsController', () => {
 
   describe('findOne', () => {
     it('should return a single measurement by id', async () => {
-      mockMeasurementsService.findOne.mockResolvedValue(mockMeasurement);
+      const measurement = makeMeasurement();
+      mockMeasurementsService.findOne.mockResolvedValue(measurement);
 
       const result = await controller.findOne(mockRequest, measurementId);
 
-      expect(result).toEqual(mockMeasurement);
+      expect(result).toEqual(measurement);
       expect(mockMeasurementsService.findOne).toHaveBeenCalledWith(
         measurementId,
         userId,
@@ -158,8 +113,8 @@ describe('MeasurementsController', () => {
 
   describe('update', () => {
     it('should update a measurement and return the updated result', async () => {
-      const updatedMeasurement = { ...mockMeasurement, weight: '82.00' };
-      mockMeasurementsService.update.mockResolvedValue(updatedMeasurement);
+      const updated = makeMeasurement({ weight: '82.00' });
+      mockMeasurementsService.update.mockResolvedValue(updated);
 
       const result = await controller.update(
         mockRequest,
@@ -167,7 +122,7 @@ describe('MeasurementsController', () => {
         updateDto,
       );
 
-      expect(result).toEqual(updatedMeasurement);
+      expect(result).toEqual(updated);
       expect(mockMeasurementsService.update).toHaveBeenCalledWith(
         measurementId,
         userId,

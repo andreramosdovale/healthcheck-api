@@ -1,15 +1,15 @@
 import {
   Injectable,
-  Inject,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, and, desc } from 'drizzle-orm';
-import { DRIZZLE } from '@/database/drizzle.module';
-import type { DrizzleDB } from '@/database/db';
-import { measurements, users } from '@/database/schema';
+import { MeasurementsRepository } from './measurements.repository';
 import { CreateMeasurementDto } from './dto/create-measurement.dto';
 import { UpdateMeasurementDto } from './dto/update-measurement.dto';
+import type {
+  Measurement,
+  MeasurementUpdateData,
+} from './types/measurements.types';
 import {
   calculateAge,
   calculatePollockBodyFat,
@@ -19,15 +19,26 @@ import {
   canCalculateNavyFemale,
 } from './utils/body-fat-calculator';
 
+type DtoUpdateValues = Omit<
+  MeasurementUpdateData,
+  | 'updatedAt'
+  | 'bodyFatPercentage'
+  | 'navyBodyFatPercentage'
+  | 'leanMass'
+  | 'fatMass'
+>;
+
 @Injectable()
 export class MeasurementsService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(
+    private readonly measurementsRepository: MeasurementsRepository,
+  ) {}
 
-  async create(userId: string, createMeasurementDto: CreateMeasurementDto) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+  async create(
+    userId: string,
+    createMeasurementDto: CreateMeasurementDto,
+  ): Promise<Measurement> {
+    const user = await this.measurementsRepository.findUserById(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -108,58 +119,46 @@ export class MeasurementsService {
       }
     }
 
-    const [measurement] = await this.db
-      .insert(measurements)
-      .values({
-        userId,
-        measurementDate: createMeasurementDto.measurementDate,
-        weight: createMeasurementDto.weight.toString(),
-        // Skinfolds
-        triceps: createMeasurementDto.triceps?.toString(),
-        subscapular: createMeasurementDto.subscapular?.toString(),
-        chest: createMeasurementDto.chest?.toString(),
-        midaxillary: createMeasurementDto.midaxillary?.toString(),
-        suprailiac: createMeasurementDto.suprailiac?.toString(),
-        abdominal: createMeasurementDto.abdominal?.toString(),
-        thigh: createMeasurementDto.thigh?.toString(),
-        // Circumferences
-        neck: createMeasurementDto.neck?.toString(),
-        shoulders: createMeasurementDto.shoulders?.toString(),
-        chestCirc: createMeasurementDto.chestCirc?.toString(),
-        waist: createMeasurementDto.waist?.toString(),
-        hip: createMeasurementDto.hip?.toString(),
-        leftThigh: createMeasurementDto.leftThigh?.toString(),
-        rightThigh: createMeasurementDto.rightThigh?.toString(),
-        leftCalf: createMeasurementDto.leftCalf?.toString(),
-        rightCalf: createMeasurementDto.rightCalf?.toString(),
-        leftBicepRelaxed: createMeasurementDto.leftBicepRelaxed?.toString(),
-        rightBicepRelaxed: createMeasurementDto.rightBicepRelaxed?.toString(),
-        leftBicepFlexed: createMeasurementDto.leftBicepFlexed?.toString(),
-        rightBicepFlexed: createMeasurementDto.rightBicepFlexed?.toString(),
-        // Calculated
-        bodyFatPercentage: bodyFatPercentage?.toString(),
-        navyBodyFatPercentage: navyBodyFatPercentage?.toString(),
-        leanMass: leanMass?.toString(),
-        fatMass: fatMass?.toString(),
-      })
-      .returning();
-
-    return measurement;
+    return this.measurementsRepository.insert({
+      userId,
+      measurementDate: createMeasurementDto.measurementDate,
+      weight: createMeasurementDto.weight.toString(),
+      // Skinfolds
+      triceps: createMeasurementDto.triceps?.toString(),
+      subscapular: createMeasurementDto.subscapular?.toString(),
+      chest: createMeasurementDto.chest?.toString(),
+      midaxillary: createMeasurementDto.midaxillary?.toString(),
+      suprailiac: createMeasurementDto.suprailiac?.toString(),
+      abdominal: createMeasurementDto.abdominal?.toString(),
+      thigh: createMeasurementDto.thigh?.toString(),
+      // Circumferences
+      neck: createMeasurementDto.neck?.toString(),
+      shoulders: createMeasurementDto.shoulders?.toString(),
+      chestCirc: createMeasurementDto.chestCirc?.toString(),
+      waist: createMeasurementDto.waist?.toString(),
+      hip: createMeasurementDto.hip?.toString(),
+      leftThigh: createMeasurementDto.leftThigh?.toString(),
+      rightThigh: createMeasurementDto.rightThigh?.toString(),
+      leftCalf: createMeasurementDto.leftCalf?.toString(),
+      rightCalf: createMeasurementDto.rightCalf?.toString(),
+      leftBicepRelaxed: createMeasurementDto.leftBicepRelaxed?.toString(),
+      rightBicepRelaxed: createMeasurementDto.rightBicepRelaxed?.toString(),
+      leftBicepFlexed: createMeasurementDto.leftBicepFlexed?.toString(),
+      rightBicepFlexed: createMeasurementDto.rightBicepFlexed?.toString(),
+      // Calculated
+      bodyFatPercentage: bodyFatPercentage?.toString(),
+      navyBodyFatPercentage: navyBodyFatPercentage?.toString(),
+      leanMass: leanMass?.toString(),
+      fatMass: fatMass?.toString(),
+    });
   }
 
-  async findAllByUser(userId: string) {
-    return this.db
-      .select()
-      .from(measurements)
-      .where(eq(measurements.userId, userId))
-      .orderBy(desc(measurements.measurementDate));
+  async findAllByUser(userId: string): Promise<Measurement[]> {
+    return this.measurementsRepository.findAllByUser(userId);
   }
 
-  async findOne(id: string, userId: string) {
-    const [measurement] = await this.db
-      .select()
-      .from(measurements)
-      .where(and(eq(measurements.id, id), eq(measurements.userId, userId)));
+  async findOne(id: string, userId: string): Promise<Measurement> {
+    const measurement = await this.measurementsRepository.findById(id, userId);
 
     if (!measurement) {
       throw new NotFoundException('Measurement not found');
@@ -172,13 +171,13 @@ export class MeasurementsService {
     id: string,
     userId: string,
     updateMeasurementDto: UpdateMeasurementDto,
-  ) {
+  ): Promise<Measurement> {
     const existing = await this.findOne(id, userId);
 
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+    const user = await this.measurementsRepository.findUserById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     const skinfolds = {
       triceps: this.mergeNum(updateMeasurementDto.triceps, existing.triceps),
@@ -274,28 +273,21 @@ export class MeasurementsService {
       }
     }
 
-    const [measurement] = await this.db
-      .update(measurements)
-      .set({
-        ...this.toDbValues(updateMeasurementDto),
-        bodyFatPercentage: bodyFatPercentage?.toString() ?? null,
-        navyBodyFatPercentage: navyBodyFatPercentage?.toString() ?? null,
-        leanMass: leanMass?.toString() ?? null,
-        fatMass: fatMass?.toString() ?? null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(measurements.id, id), eq(measurements.userId, userId)))
-      .returning();
+    const updateData: MeasurementUpdateData = {
+      ...this.toDbValues(updateMeasurementDto),
+      bodyFatPercentage: bodyFatPercentage?.toString() ?? null,
+      navyBodyFatPercentage: navyBodyFatPercentage?.toString() ?? null,
+      leanMass: leanMass?.toString() ?? null,
+      fatMass: fatMass?.toString() ?? null,
+      updatedAt: new Date(),
+    };
 
-    return measurement;
+    return this.measurementsRepository.update(id, userId, updateData);
   }
 
-  async remove(id: string, userId: string) {
+  async remove(id: string, userId: string): Promise<void> {
     await this.findOne(id, userId);
-
-    await this.db
-      .delete(measurements)
-      .where(and(eq(measurements.id, id), eq(measurements.userId, userId)));
+    await this.measurementsRepository.delete(id, userId);
   }
 
   private mergeNum(
@@ -320,7 +312,7 @@ export class MeasurementsService {
         : null;
   }
 
-  private toDbValues(dto: Partial<CreateMeasurementDto>) {
+  private toDbValues(dto: Partial<CreateMeasurementDto>): DtoUpdateValues {
     const result: Record<string, string | null | undefined> = {};
 
     for (const [key, value] of Object.entries(dto)) {
@@ -334,6 +326,6 @@ export class MeasurementsService {
       }
     }
 
-    return result;
+    return result as DtoUpdateValues;
   }
 }

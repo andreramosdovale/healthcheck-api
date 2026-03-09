@@ -137,7 +137,7 @@ describe('AuthService', () => {
       const result = await service.login(loginDto);
 
       expect(result).toHaveProperty('user');
-      expect(result.user).not.toHaveProperty('passwordHash');
+      expect(result.user).not.toHaveProperty('hashedPassword');
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
       expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
       expect(usersService.findByEmailOrNickname).toHaveBeenCalledWith(
