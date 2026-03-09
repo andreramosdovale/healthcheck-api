@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthController } from '../../../src/auth/auth.controller';
-import { AuthService } from '../../../src/auth/auth.service';
-import { CreateUserDto } from '../../../src/users/dto/create-user.dto';
-import { LoginDto } from '../../../src/auth/dto/login.dto';
-import { RefreshTokenDto } from '../../../src/auth/dto/refresh-token.dto';
+import { AuthController } from '@/auth/auth.controller';
+import { AuthService } from '@/auth/auth.service';
+import { CreateUserDto } from '@/users/dto/create-user.dto';
+import { LoginDto } from '@/auth/dto/login.dto';
+import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -119,7 +119,9 @@ describe('AuthController', () => {
       const result = await controller.refresh(refreshTokenDto);
 
       expect(result).toEqual(expectedResult);
-      expect(service.refresh).toHaveBeenCalledWith(refreshTokenDto.refreshToken);
+      expect(service.refresh).toHaveBeenCalledWith(
+        refreshTokenDto.refreshToken,
+      );
       expect(service.refresh).toHaveBeenCalledTimes(1);
     });
   });

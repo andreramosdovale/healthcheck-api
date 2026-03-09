@@ -1,9 +1,12 @@
 import { SetMetadata } from '@nestjs/common';
-import { PERMISSIONS_KEY, Permissions } from '../../../../src/common/decorators/permissions.decorator';
+import {
+  PERMISSIONS_KEY,
+  Permissions,
+} from '@/common/decorators/permissions.decorator';
 
 jest.mock('@nestjs/common', () => ({
-  SetMetadata: jest.fn((key: string, value: any) => {
-    return (target: any) => {
+  SetMetadata: jest.fn((key: string, value: string[]) => {
+    return (target: object) => {
       Reflect.defineMetadata(key, value, target);
       return target;
     };

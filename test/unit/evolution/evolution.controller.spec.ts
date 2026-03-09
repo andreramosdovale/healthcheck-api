@@ -6,7 +6,6 @@ import { PermissionsGuard } from '@/common/guards/permissions.guard';
 
 describe('EvolutionController', () => {
   let controller: EvolutionController;
-  let service: EvolutionService;
 
   const userId = '123e4567-e89b-12d3-a456-426614174000';
   const fromId = '223e4567-e89b-12d3-a456-426614174001';
@@ -60,7 +59,6 @@ describe('EvolutionController', () => {
       .compile();
 
     controller = module.get<EvolutionController>(EvolutionController);
-    service = module.get<EvolutionService>(EvolutionService);
   });
 
   afterEach(() => {
@@ -93,8 +91,8 @@ describe('EvolutionController', () => {
       const result = await controller.getSummary(mockRequest, 30);
 
       expect(result).toEqual(summaryPoints);
-      expect(service.getSummary).toHaveBeenCalledWith(userId, 30);
-      expect(service.getSummary).toHaveBeenCalledTimes(1);
+      expect(mockEvolutionService.getSummary).toHaveBeenCalledWith(userId, 30);
+      expect(mockEvolutionService.getSummary).toHaveBeenCalledTimes(1);
     });
 
     it('should pass custom limit to the service', async () => {
@@ -102,7 +100,7 @@ describe('EvolutionController', () => {
 
       await controller.getSummary(mockRequest, 10);
 
-      expect(service.getSummary).toHaveBeenCalledWith(userId, 10);
+      expect(mockEvolutionService.getSummary).toHaveBeenCalledWith(userId, 10);
     });
 
     it('should return empty array when no measurements exist', async () => {
@@ -111,14 +109,19 @@ describe('EvolutionController', () => {
       const result = await controller.getSummary(mockRequest, 30);
 
       expect(result).toEqual([]);
-      expect(service.getSummary).toHaveBeenCalledWith(userId, 30);
+      expect(mockEvolutionService.getSummary).toHaveBeenCalledWith(userId, 30);
     });
   });
 
   describe('compare', () => {
     const compareResult = {
       from: baseMeasurement,
-      to: { ...baseMeasurement, id: toId, measurementDate: '2024-02-01', weight: '78.00' },
+      to: {
+        ...baseMeasurement,
+        id: toId,
+        measurementDate: '2024-02-01',
+        weight: '78.00',
+      },
       diff: {
         days: 31,
         weight: -2,
@@ -134,8 +137,12 @@ describe('EvolutionController', () => {
       const result = await controller.compare(mockRequest, fromId, toId);
 
       expect(result).toEqual(compareResult);
-      expect(service.compare).toHaveBeenCalledWith(userId, fromId, toId);
-      expect(service.compare).toHaveBeenCalledTimes(1);
+      expect(mockEvolutionService.compare).toHaveBeenCalledWith(
+        userId,
+        fromId,
+        toId,
+      );
+      expect(mockEvolutionService.compare).toHaveBeenCalledTimes(1);
     });
 
     it('should pass fromId and toId to the service', async () => {
@@ -143,7 +150,11 @@ describe('EvolutionController', () => {
 
       await controller.compare(mockRequest, fromId, toId);
 
-      expect(service.compare).toHaveBeenCalledWith(userId, fromId, toId);
+      expect(mockEvolutionService.compare).toHaveBeenCalledWith(
+        userId,
+        fromId,
+        toId,
+      );
     });
   });
 
@@ -161,8 +172,8 @@ describe('EvolutionController', () => {
       const result = await controller.getLatest(mockRequest);
 
       expect(result).toEqual(latestResult);
-      expect(service.getLatest).toHaveBeenCalledWith(userId);
-      expect(service.getLatest).toHaveBeenCalledTimes(1);
+      expect(mockEvolutionService.getLatest).toHaveBeenCalledWith(userId);
+      expect(mockEvolutionService.getLatest).toHaveBeenCalledTimes(1);
     });
 
     it('should return unknown trend when only one measurement exists', async () => {
@@ -177,7 +188,7 @@ describe('EvolutionController', () => {
       const result = await controller.getLatest(mockRequest);
 
       expect(result).toEqual(unknownResult);
-      expect(service.getLatest).toHaveBeenCalledWith(userId);
+      expect(mockEvolutionService.getLatest).toHaveBeenCalledWith(userId);
     });
   });
 });

@@ -8,7 +8,6 @@ import { PermissionsGuard } from '@/common/guards/permissions.guard';
 
 describe('MeasurementsController', () => {
   let controller: MeasurementsController;
-  let service: MeasurementsService;
 
   const userId = '123e4567-e89b-12d3-a456-426614174000';
   const measurementId = '223e4567-e89b-12d3-a456-426614174001';
@@ -92,7 +91,6 @@ describe('MeasurementsController', () => {
       .compile();
 
     controller = module.get<MeasurementsController>(MeasurementsController);
-    service = module.get<MeasurementsService>(MeasurementsService);
   });
 
   afterEach(() => {
@@ -106,8 +104,11 @@ describe('MeasurementsController', () => {
       const result = await controller.create(mockRequest, createDto);
 
       expect(result).toEqual(mockMeasurement);
-      expect(service.create).toHaveBeenCalledWith(userId, createDto);
-      expect(service.create).toHaveBeenCalledTimes(1);
+      expect(mockMeasurementsService.create).toHaveBeenCalledWith(
+        userId,
+        createDto,
+      );
+      expect(mockMeasurementsService.create).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -122,8 +123,10 @@ describe('MeasurementsController', () => {
       const result = await controller.findAll(mockRequest);
 
       expect(result).toEqual(measurements);
-      expect(service.findAllByUser).toHaveBeenCalledWith(userId);
-      expect(service.findAllByUser).toHaveBeenCalledTimes(1);
+      expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledWith(
+        userId,
+      );
+      expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledTimes(1);
     });
 
     it('should return empty array when user has no measurements', async () => {
@@ -132,7 +135,9 @@ describe('MeasurementsController', () => {
       const result = await controller.findAll(mockRequest);
 
       expect(result).toEqual([]);
-      expect(service.findAllByUser).toHaveBeenCalledWith(userId);
+      expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledWith(
+        userId,
+      );
     });
   });
 
@@ -143,8 +148,11 @@ describe('MeasurementsController', () => {
       const result = await controller.findOne(mockRequest, measurementId);
 
       expect(result).toEqual(mockMeasurement);
-      expect(service.findOne).toHaveBeenCalledWith(measurementId, userId);
-      expect(service.findOne).toHaveBeenCalledTimes(1);
+      expect(mockMeasurementsService.findOne).toHaveBeenCalledWith(
+        measurementId,
+        userId,
+      );
+      expect(mockMeasurementsService.findOne).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -160,12 +168,12 @@ describe('MeasurementsController', () => {
       );
 
       expect(result).toEqual(updatedMeasurement);
-      expect(service.update).toHaveBeenCalledWith(
+      expect(mockMeasurementsService.update).toHaveBeenCalledWith(
         measurementId,
         userId,
         updateDto,
       );
-      expect(service.update).toHaveBeenCalledTimes(1);
+      expect(mockMeasurementsService.update).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -176,8 +184,11 @@ describe('MeasurementsController', () => {
       const result = await controller.remove(mockRequest, measurementId);
 
       expect(result).toBeUndefined();
-      expect(service.remove).toHaveBeenCalledWith(measurementId, userId);
-      expect(service.remove).toHaveBeenCalledTimes(1);
+      expect(mockMeasurementsService.remove).toHaveBeenCalledWith(
+        measurementId,
+        userId,
+      );
+      expect(mockMeasurementsService.remove).toHaveBeenCalledTimes(1);
     });
   });
 });

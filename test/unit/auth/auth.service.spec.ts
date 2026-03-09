@@ -3,11 +3,12 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { AuthService } from '../../../src/auth/auth.service';
-import { UsersService } from '../../../src/users/users.service';
-import { DRIZZLE } from '../../../src/database/drizzle.module';
-import { CreateUserDto } from '../../../src/users/dto/create-user.dto';
-import { LoginDto } from '../../../src/auth/dto/login.dto';
+import { AuthService } from '@/auth/auth.service';
+import { UsersService } from '@/users/users.service';
+import { DRIZZLE } from '@/database/drizzle.module';
+import { CreateUserDto } from '@/users/dto/create-user.dto';
+import { LoginDto } from '@/auth/dto/login.dto';
+import { makeUser, makeSanitizedUser } from '@test/stubs/user.stub';
 
 jest.mock('bcrypt');
 jest.mock('crypto', () => ({
@@ -16,44 +17,30 @@ jest.mock('crypto', () => ({
   }),
 }));
 
+type MockDb = {
+  select: jest.Mock;
+  insert: jest.Mock;
+  update: jest.Mock;
+};
+
+type MockUsersService = {
+  create: jest.Mock;
+  findByEmailOrNickname: jest.Mock;
+  findById: jest.Mock;
+};
+
+type MockJwtService = {
+  sign: jest.Mock;
+};
+
 describe('AuthService', () => {
   let service: AuthService;
-  let usersService: UsersService;
-  let jwtService: JwtService;
-  let mockDb: any;
+  let usersService: MockUsersService;
+  let jwtService: MockJwtService;
+  let mockDb: MockDb;
 
-  const mockUser = {
-    id: '123e4567-e89b-12d3-a456-426614174000',
-    email: 'test@example.com',
-    nickname: 'testuser',
-    passwordHash: 'hashedPassword',
-    name: 'Test User',
-    birthDate: '1990-01-01',
-    sex: 'male' as const,
-    height: '175',
-    plan: 'free' as const,
-    termsAccepted: true,
-    termsAcceptedAt: new Date(),
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: null,
-  };
-
-  const mockUserWithoutPassword = {
-    id: '123e4567-e89b-12d3-a456-426614174000',
-    email: 'test@example.com',
-    nickname: 'testuser',
-    name: 'Test User',
-    birthDate: '1990-01-01',
-    sex: 'male' as const,
-    height: '175',
-    plan: 'free' as const,
-    termsAccepted: true,
-    termsAcceptedAt: new Date(),
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: null,
-  };
+  const mockUser = makeUser();
+  const mockUserWithoutPassword = makeSanitizedUser();
 
   const createUserDto: CreateUserDto = {
     email: 'test@example.com',
@@ -87,13 +74,13 @@ describe('AuthService', () => {
       update: jest.fn(),
     };
 
-    const mockUsersService = {
+    usersService = {
       create: jest.fn(),
       findByEmailOrNickname: jest.fn(),
       findById: jest.fn(),
     };
 
-    const mockJwtService = {
+    jwtService = {
       sign: jest.fn().mockReturnValue('mock-access-token'),
     };
 
@@ -104,28 +91,14 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        {
-          provide: DRIZZLE,
-          useValue: mockDb,
-        },
-        {
-          provide: UsersService,
-          useValue: mockUsersService,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
-        },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
+        { provide: DRIZZLE, useValue: mockDb },
+        { provide: UsersService, useValue: usersService },
+        { provide: JwtService, useValue: jwtService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    usersService = module.get<UsersService>(UsersService);
-    jwtService = module.get<JwtService>(JwtService);
   });
 
   afterEach(() => {
@@ -134,7 +107,7 @@ describe('AuthService', () => {
 
   describe('register', () => {
     it('should register a new user and return tokens', async () => {
-      jest.spyOn(usersService, 'create').mockResolvedValue(mockUserWithoutPassword);
+      usersService.create.mockResolvedValue(mockUserWithoutPassword);
 
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnThis(),
@@ -153,7 +126,7 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('should login successfully and return user with tokens', async () => {
-      jest.spyOn(usersService, 'findByEmailOrNickname').mockResolvedValue(mockUser);
+      usersService.findByEmailOrNickname.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
       mockDb.insert.mockReturnValue({
@@ -167,31 +140,46 @@ describe('AuthService', () => {
       expect(result.user).not.toHaveProperty('passwordHash');
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
       expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
-      expect(usersService.findByEmailOrNickname).toHaveBeenCalledWith(loginDto.login);
-      expect(bcrypt.compare).toHaveBeenCalledWith(loginDto.password, mockUser.passwordHash);
+      expect(usersService.findByEmailOrNickname).toHaveBeenCalledWith(
+        loginDto.login,
+      );
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        loginDto.password,
+        mockUser.passwordHash,
+      );
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
-      jest.spyOn(usersService, 'findByEmailOrNickname').mockResolvedValue(null as any);
+      usersService.findByEmailOrNickname.mockResolvedValue(null);
 
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(service.login(loginDto)).rejects.toThrow('Invalid credentials');
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.login(loginDto)).rejects.toThrow(
+        'Invalid credentials',
+      );
     });
 
     it('should throw UnauthorizedException if user is inactive', async () => {
-      const inactiveUser = { ...mockUser, isActive: false };
-      jest.spyOn(usersService, 'findByEmailOrNickname').mockResolvedValue(inactiveUser);
+      const inactiveUser = makeUser({ isActive: false });
+      usersService.findByEmailOrNickname.mockResolvedValue(inactiveUser);
 
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
       await expect(service.login(loginDto)).rejects.toThrow('User is inactive');
     });
 
     it('should throw UnauthorizedException if password is invalid', async () => {
-      jest.spyOn(usersService, 'findByEmailOrNickname').mockResolvedValue(mockUser);
+      usersService.findByEmailOrNickname.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(service.login(loginDto)).rejects.toThrow('Invalid credentials');
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.login(loginDto)).rejects.toThrow(
+        'Invalid credentials',
+      );
     });
   });
 
@@ -202,7 +190,7 @@ describe('AuthService', () => {
         where: jest.fn().mockResolvedValue([mockRefreshToken]),
       });
 
-      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUserWithoutPassword);
+      usersService.findById.mockResolvedValue(mockUserWithoutPassword);
 
       mockDb.update.mockReturnValue({
         set: jest.fn().mockReturnThis(),
@@ -219,7 +207,9 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('user');
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
       expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
-      expect(usersService.findById).toHaveBeenCalledWith(mockRefreshToken.userId);
+      expect(usersService.findById).toHaveBeenCalledWith(
+        mockRefreshToken.userId,
+      );
     });
 
     it('should throw UnauthorizedException if refresh token not found', async () => {
@@ -228,7 +218,9 @@ describe('AuthService', () => {
         where: jest.fn().mockResolvedValue([]),
       });
 
-      await expect(service.refresh('invalid-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('invalid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
       await expect(service.refresh('invalid-token')).rejects.toThrow(
         'Invalid or expired refresh token',
       );
@@ -241,20 +233,24 @@ describe('AuthService', () => {
         where: jest.fn().mockResolvedValue([revokedToken]),
       });
 
-      await expect(service.refresh('revoked-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('revoked-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException if user is inactive', async () => {
-      const inactiveUser = { ...mockUserWithoutPassword, isActive: false };
+      const inactiveUser = makeSanitizedUser({ isActive: false });
 
       mockDb.select.mockReturnValue({
         from: jest.fn().mockReturnThis(),
         where: jest.fn().mockResolvedValue([mockRefreshToken]),
       });
 
-      jest.spyOn(usersService, 'findById').mockResolvedValue(inactiveUser);
+      usersService.findById.mockResolvedValue(inactiveUser);
 
-      await expect(service.refresh('mock-refresh-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('mock-refresh-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
       await expect(service.refresh('mock-refresh-token')).rejects.toThrow(
         'User not found or inactive',
       );
@@ -276,48 +272,72 @@ describe('AuthService', () => {
   });
 
   describe('calculateExpiration', () => {
+    type AuthServicePrivate = {
+      calculateExpiration: (expiresIn: string) => Date;
+    };
+
     it('should calculate expiration for seconds', () => {
-      const result = (service as any).calculateExpiration('60s');
+      const result = (
+        service as unknown as AuthServicePrivate
+      ).calculateExpiration('60s');
       const now = new Date();
       const expected = new Date(now.getTime() + 60 * 1000);
 
-      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(
+        expected.getTime() - 1000,
+      );
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
     it('should calculate expiration for minutes', () => {
-      const result = (service as any).calculateExpiration('30m');
+      const result = (
+        service as unknown as AuthServicePrivate
+      ).calculateExpiration('30m');
       const now = new Date();
       const expected = new Date(now.getTime() + 30 * 60 * 1000);
 
-      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(
+        expected.getTime() - 1000,
+      );
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
     it('should calculate expiration for hours', () => {
-      const result = (service as any).calculateExpiration('2h');
+      const result = (
+        service as unknown as AuthServicePrivate
+      ).calculateExpiration('2h');
       const now = new Date();
       const expected = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 
-      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(
+        expected.getTime() - 1000,
+      );
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
     it('should calculate expiration for days', () => {
-      const result = (service as any).calculateExpiration('7d');
+      const result = (
+        service as unknown as AuthServicePrivate
+      ).calculateExpiration('7d');
       const now = new Date();
       const expected = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(
+        expected.getTime() - 1000,
+      );
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
     it('should default to 7 days for invalid format', () => {
-      const result = (service as any).calculateExpiration('invalid');
+      const result = (
+        service as unknown as AuthServicePrivate
+      ).calculateExpiration('invalid');
       const now = new Date();
       const expected = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(
+        expected.getTime() - 1000,
+      );
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
   });

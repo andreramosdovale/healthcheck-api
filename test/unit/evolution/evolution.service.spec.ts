@@ -3,9 +3,13 @@ import { NotFoundException } from '@nestjs/common';
 import { EvolutionService } from '@/evolution/evolution.service';
 import { DRIZZLE } from '@/database/drizzle.module';
 
+type MockDb = {
+  select: jest.Mock;
+};
+
 describe('EvolutionService', () => {
   let service: EvolutionService;
-  let mockDb: any;
+  let mockDb: MockDb;
 
   const userId = '123e4567-e89b-12d3-a456-426614174000';
   const fromId = '223e4567-e89b-12d3-a456-426614174001';
@@ -224,7 +228,12 @@ describe('EvolutionService', () => {
 
     it('should return null diffs when body fat is not available', async () => {
       const from = { ...baseMeasurement, id: fromId, weight: '80.00' };
-      const to = { ...baseMeasurement, id: toId, weight: '78.00', measurementDate: '2024-02-01' };
+      const to = {
+        ...baseMeasurement,
+        id: toId,
+        weight: '78.00',
+        measurementDate: '2024-02-01',
+      };
 
       mockDb.select
         .mockReturnValueOnce({
@@ -261,7 +270,10 @@ describe('EvolutionService', () => {
     });
 
     it('should throw NotFoundException when from measurement belongs to another user', async () => {
-      const otherUserMeasurement = { ...baseMeasurement, userId: 'other-user-id' };
+      const otherUserMeasurement = {
+        ...baseMeasurement,
+        userId: 'other-user-id',
+      };
 
       mockDb.select
         .mockReturnValueOnce({
@@ -295,7 +307,10 @@ describe('EvolutionService', () => {
     });
 
     it('should throw NotFoundException when to measurement belongs to another user', async () => {
-      const otherUserMeasurement = { ...laterMeasurement, userId: 'other-user-id' };
+      const otherUserMeasurement = {
+        ...laterMeasurement,
+        userId: 'other-user-id',
+      };
 
       mockDb.select
         .mockReturnValueOnce({
@@ -314,7 +329,11 @@ describe('EvolutionService', () => {
 
     it('should calculate days correctly between two dates', async () => {
       const from = { ...baseMeasurement, measurementDate: '2024-01-01' };
-      const to = { ...baseMeasurement, id: toId, measurementDate: '2024-01-31' };
+      const to = {
+        ...baseMeasurement,
+        id: toId,
+        measurementDate: '2024-01-31',
+      };
 
       mockDb.select
         .mockReturnValueOnce({
@@ -341,7 +360,9 @@ describe('EvolutionService', () => {
         limit: jest.fn().mockResolvedValue([]),
       });
 
-      await expect(service.getLatest(userId)).rejects.toThrow(NotFoundException);
+      await expect(service.getLatest(userId)).rejects.toThrow(
+        NotFoundException,
+      );
       await expect(service.getLatest(userId)).rejects.toThrow(
         'No measurements found',
       );
@@ -594,9 +615,7 @@ describe('EvolutionService', () => {
         from: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
-        limit: jest
-          .fn()
-          .mockResolvedValue([laterMeasurement, baseMeasurement]),
+        limit: jest.fn().mockResolvedValue([laterMeasurement, baseMeasurement]),
       });
 
       const result = await service.getLatest(userId);

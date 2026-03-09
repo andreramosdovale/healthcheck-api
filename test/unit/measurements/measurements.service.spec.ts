@@ -7,7 +7,12 @@ import { UpdateMeasurementDto } from '@/measurements/dto/update-measurement.dto'
 
 describe('MeasurementsService', () => {
   let service: MeasurementsService;
-  let mockDb: any;
+  let mockDb: {
+    select: jest.Mock;
+    insert: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+  };
 
   const userId = '123e4567-e89b-12d3-a456-426614174000';
   const measurementId = '223e4567-e89b-12d3-a456-426614174001';
@@ -312,7 +317,6 @@ describe('MeasurementsService', () => {
       const result = await service.create(userId, dtoWithoutHip);
 
       expect(result).toEqual(mockMeasurement);
-      const insertCall = mockDb.insert().values;
       expect(mockDb.insert).toHaveBeenCalled();
     });
   });
