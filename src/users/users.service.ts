@@ -1,40 +1,31 @@
 import {
   Injectable,
-  Inject,
   NotFoundException,
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, or } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
-import { DRIZZLE } from '@/database/drizzle.module';
-import type { DrizzleDB } from '@/database/db';
-import { users } from '@/database/schema';
+import { UsersRepository } from './users.repository';
+import type { User, SanitizedUser } from './types/users.types';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(private readonly usersRepository: UsersRepository) {}
 
-  async create(createUserDto: CreateUserDto) {
+  async create(createUserDto: CreateUserDto): Promise<SanitizedUser> {
     if (!createUserDto.termsAccepted) {
       throw new BadRequestException('Terms must be accepted');
     }
 
-    const existing = await this.db
-      .select()
-      .from(users)
-      .where(
-        or(
-          eq(users.email, createUserDto.email),
-          eq(users.nickname, createUserDto.nickname),
-        ),
-      );
+    const existing = await this.usersRepository.findConflictingUser(
+      createUserDto.email,
+      createUserDto.nickname,
+    );
 
-    if (existing.length > 0) {
-      const existingUser = existing[0];
-      if (existingUser.email === createUserDto.email) {
+    if (existing) {
+      if (existing.email === createUserDto.email) {
         throw new ConflictException('Email already exists');
       }
       throw new ConflictException('Nickname already exists');
@@ -42,31 +33,28 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(createUserDto.password, 12);
 
-    const [user] = await this.db
-      .insert(users)
-      .values({
-        email: createUserDto.email,
-        nickname: createUserDto.nickname,
-        passwordHash,
-        name: createUserDto.name,
-        birthDate: createUserDto.birthDate,
-        sex: createUserDto.sex,
-        height: createUserDto.height.toString(),
-        termsAccepted: true,
-        termsAcceptedAt: new Date(),
-      })
-      .returning();
+    const user = await this.usersRepository.create({
+      email: createUserDto.email,
+      nickname: createUserDto.nickname,
+      passwordHash,
+      name: createUserDto.name,
+      birthDate: createUserDto.birthDate,
+      sex: createUserDto.sex,
+      height: createUserDto.height.toString(),
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
+    });
 
     return this.sanitizeUser(user);
   }
 
-  async findAll() {
-    const result = await this.db.select().from(users);
-    return result.map(this.sanitizeUser);
+  async findAll(): Promise<SanitizedUser[]> {
+    const result = await this.usersRepository.findAll();
+    return result.map((user) => this.sanitizeUser(user));
   }
 
-  async findById(id: string) {
-    const [user] = await this.db.select().from(users).where(eq(users.id, id));
+  async findById(id: string): Promise<SanitizedUser> {
+    const user = await this.usersRepository.findById(id);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -75,57 +63,40 @@ export class UsersService {
     return this.sanitizeUser(user);
   }
 
-  async findByEmail(email: string) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.email, email));
-
-    return user || null;
+  async findByEmail(email: string): Promise<User | null> {
+    return this.usersRepository.findByEmail(email);
   }
 
-  async findByNickname(nickname: string) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.nickname, nickname));
-
-    return user || null;
+  async findByNickname(nickname: string): Promise<User | null> {
+    return this.usersRepository.findByNickname(nickname);
   }
 
-  async findByEmailOrNickname(login: string) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(or(eq(users.email, login), eq(users.nickname, login)));
-
-    return user || null;
+  async findByEmailOrNickname(login: string): Promise<User | null> {
+    return this.usersRepository.findByEmailOrNickname(login);
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<SanitizedUser> {
     await this.findById(id);
 
-    const [user] = await this.db
-      .update(users)
-      .set({
-        ...updateUserDto,
-        height: updateUserDto.height?.toString(),
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, id))
-      .returning();
+    const user = await this.usersRepository.update(id, {
+      ...updateUserDto,
+      height: updateUserDto.height?.toString(),
+      updatedAt: new Date(),
+    });
 
     return this.sanitizeUser(user);
   }
 
-  async remove(id: string) {
+  async remove(id: string): Promise<void> {
     await this.findById(id);
-
-    await this.db.delete(users).where(eq(users.id, id));
+    await this.usersRepository.delete(id);
   }
 
-  private sanitizeUser(user: typeof users.$inferSelect) {
-    const { passwordHash, ...sanitized } = user;
+  private sanitizeUser(user: User): SanitizedUser {
+    const { ...sanitized } = user;
     return sanitized;
   }
 }
