@@ -1,4 +1,4 @@
-import type { Measurement } from '@/database/schema';
+import type { Measurement } from '@/measurements/types/measurements.types';
 
 export interface SummaryPoint {
   date: string;

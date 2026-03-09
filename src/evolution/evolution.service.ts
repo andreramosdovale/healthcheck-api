@@ -1,8 +1,6 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, desc, asc } from 'drizzle-orm';
-import { DRIZZLE } from '@/database/drizzle.module';
-import type { DrizzleDB } from '@/database/db';
-import { measurements } from '@/database/schema';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { EvolutionRepository } from './evolution.repository';
+import type { Measurement } from '@/measurements/types/measurements.types';
 import type {
   SummaryPoint,
   CompareResult,
@@ -11,35 +9,10 @@ import type {
 
 @Injectable()
 export class EvolutionService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(private readonly evolutionRepository: EvolutionRepository) {}
 
   async getSummary(userId: string, limit = 30): Promise<SummaryPoint[]> {
-    const result = await this.db
-      .select({
-        date: measurements.measurementDate,
-        weight: measurements.weight,
-        bodyFatPercentage: measurements.bodyFatPercentage,
-        navyBodyFatPercentage: measurements.navyBodyFatPercentage,
-        leanMass: measurements.leanMass,
-        fatMass: measurements.fatMass,
-      })
-      .from(measurements)
-      .where(eq(measurements.userId, userId))
-      .orderBy(asc(measurements.measurementDate))
-      .limit(limit);
-
-    return result.map((r) => ({
-      date: r.date,
-      weight: parseFloat(r.weight),
-      bodyFatPercentage: r.bodyFatPercentage
-        ? parseFloat(r.bodyFatPercentage)
-        : null,
-      navyBodyFatPercentage: r.navyBodyFatPercentage
-        ? parseFloat(r.navyBodyFatPercentage)
-        : null,
-      leanMass: r.leanMass ? parseFloat(r.leanMass) : null,
-      fatMass: r.fatMass ? parseFloat(r.fatMass) : null,
-    }));
+    return this.evolutionRepository.getSummary(userId, limit);
   }
 
   async compare(
@@ -47,15 +20,8 @@ export class EvolutionService {
     fromId: string,
     toId: string,
   ): Promise<CompareResult> {
-    const [fromMeasurement] = await this.db
-      .select()
-      .from(measurements)
-      .where(eq(measurements.id, fromId));
-
-    const [toMeasurement] = await this.db
-      .select()
-      .from(measurements)
-      .where(eq(measurements.id, toId));
+    const fromMeasurement = await this.evolutionRepository.findById(fromId);
+    const toMeasurement = await this.evolutionRepository.findById(toId);
 
     if (!fromMeasurement || fromMeasurement.userId !== userId) {
       throw new NotFoundException('From measurement not found');
@@ -118,12 +84,7 @@ export class EvolutionService {
   }
 
   async getLatest(userId: string): Promise<LatestResult> {
-    const result = await this.db
-      .select()
-      .from(measurements)
-      .where(eq(measurements.userId, userId))
-      .orderBy(desc(measurements.measurementDate))
-      .limit(2);
+    const result = await this.evolutionRepository.findLatestTwo(userId);
 
     if (result.length === 0) {
       throw new NotFoundException('No measurements found');
@@ -143,8 +104,8 @@ export class EvolutionService {
   }
 
   private calculateTrend(
-    current: typeof measurements.$inferSelect,
-    previous: typeof measurements.$inferSelect | null,
+    current: Measurement,
+    previous: Measurement | null,
   ): { trend: LatestResult['trend']; message: string } {
     if (!previous) {
       return {
