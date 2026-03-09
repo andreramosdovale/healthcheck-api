@@ -26,26 +26,32 @@ export class MeasurementsController {
 
   @Post()
   @Permissions('measurements:create')
-  create(@Request() req, @Body() createMeasurementDto: CreateMeasurementDto) {
+  create(
+    @Request() req: { user: { id: string } },
+    @Body() createMeasurementDto: CreateMeasurementDto,
+  ) {
     return this.measurementsService.create(req.user.id, createMeasurementDto);
   }
 
   @Get()
   @Permissions('measurements:read')
-  findAll(@Request() req) {
+  findAll(@Request() req: { user: { id: string } }) {
     return this.measurementsService.findAllByUser(req.user.id);
   }
 
   @Get(':id')
   @Permissions('measurements:read')
-  findOne(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+  findOne(
+    @Request() req: { user: { id: string } },
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.measurementsService.findOne(id, req.user.id);
   }
 
   @Put(':id')
   @Permissions('measurements:update')
   update(
-    @Request() req,
+    @Request() req: { user: { id: string } },
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateMeasurementDto: UpdateMeasurementDto,
   ) {
@@ -59,7 +65,10 @@ export class MeasurementsController {
   @Delete(':id')
   @Permissions('measurements:delete')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+  remove(
+    @Request() req: { user: { id: string } },
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.measurementsService.remove(id, req.user.id);
   }
 }

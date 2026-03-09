@@ -18,6 +18,7 @@ import { UsersModule } from '../users/users.module';
         return {
           secret: configService.get<string>('JWT_SECRET') || 'default-secret',
           signOptions: {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             expiresIn: expiresIn as any,
           },
         };

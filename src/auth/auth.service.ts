@@ -52,7 +52,7 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user);
-    const { passwordHash, ...userWithoutPassword } = user;
+    const { ...userWithoutPassword } = user;
 
     return {
       user: userWithoutPassword,

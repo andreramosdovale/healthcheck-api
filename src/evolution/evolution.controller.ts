@@ -21,7 +21,7 @@ export class EvolutionController {
   @Get('summary')
   @Permissions('measurements:read')
   getSummary(
-    @Request() req,
+    @Request() req: { user: { id: string } },
     @Query('limit', new DefaultValuePipe(30), ParseIntPipe) limit: number,
   ) {
     return this.evolutionService.getSummary(req.user.id, limit);
@@ -30,7 +30,7 @@ export class EvolutionController {
   @Get('compare')
   @Permissions('measurements:read')
   compare(
-    @Request() req,
+    @Request() req: { user: { id: string } },
     @Query('from', ParseUUIDPipe) fromId: string,
     @Query('to', ParseUUIDPipe) toId: string,
   ) {
@@ -39,7 +39,7 @@ export class EvolutionController {
 
   @Get('latest')
   @Permissions('measurements:read')
-  getLatest(@Request() req) {
+  getLatest(@Request() req: { user: { id: string } }) {
     return this.evolutionService.getLatest(req.user.id);
   }
 }

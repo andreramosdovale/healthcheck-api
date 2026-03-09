@@ -7,7 +7,6 @@ import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let service: AuthService;
 
   const mockUser = {
     id: '123e4567-e89b-12d3-a456-426614174000',
@@ -68,7 +67,6 @@ describe('AuthController', () => {
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
-    service = module.get<AuthService>(AuthService);
   });
 
   afterEach(() => {
@@ -86,8 +84,8 @@ describe('AuthController', () => {
       const result = await controller.register(createUserDto);
 
       expect(result).toEqual(expectedResult);
-      expect(service.register).toHaveBeenCalledWith(createUserDto);
-      expect(service.register).toHaveBeenCalledTimes(1);
+      expect(mockAuthService.register).toHaveBeenCalledWith(createUserDto);
+      expect(mockAuthService.register).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -102,8 +100,8 @@ describe('AuthController', () => {
       const result = await controller.login(loginDto);
 
       expect(result).toEqual(expectedResult);
-      expect(service.login).toHaveBeenCalledWith(loginDto);
-      expect(service.login).toHaveBeenCalledTimes(1);
+      expect(mockAuthService.login).toHaveBeenCalledWith(loginDto);
+      expect(mockAuthService.login).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -119,10 +117,10 @@ describe('AuthController', () => {
       const result = await controller.refresh(refreshTokenDto);
 
       expect(result).toEqual(expectedResult);
-      expect(service.refresh).toHaveBeenCalledWith(
+      expect(mockAuthService.refresh).toHaveBeenCalledWith(
         refreshTokenDto.refreshToken,
       );
-      expect(service.refresh).toHaveBeenCalledTimes(1);
+      expect(mockAuthService.refresh).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -134,8 +132,10 @@ describe('AuthController', () => {
       const result = await controller.logout(refreshTokenDto);
 
       expect(result).toEqual(expectedResult);
-      expect(service.logout).toHaveBeenCalledWith(refreshTokenDto.refreshToken);
-      expect(service.logout).toHaveBeenCalledTimes(1);
+      expect(mockAuthService.logout).toHaveBeenCalledWith(
+        refreshTokenDto.refreshToken,
+      );
+      expect(mockAuthService.logout).toHaveBeenCalledTimes(1);
     });
   });
 });
