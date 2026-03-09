@@ -4,8 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '@/auth/auth.service';
+import { AuthRepository } from '@/auth/auth.repository';
 import { UsersService } from '@/users/users.service';
-import { DRIZZLE } from '@/database/drizzle.module';
 import { CreateUserDto } from '@/users/dto/create-user.dto';
 import { LoginDto } from '@/auth/dto/login.dto';
 import { makeUser, makeSanitizedUser } from '@test/stubs/user.stub';
@@ -17,10 +17,11 @@ jest.mock('crypto', () => ({
   }),
 }));
 
-type MockDb = {
-  select: jest.Mock;
-  insert: jest.Mock;
-  update: jest.Mock;
+type MockAuthRepository = {
+  findValidToken: jest.Mock;
+  revokeById: jest.Mock;
+  revokeByToken: jest.Mock;
+  create: jest.Mock;
 };
 
 type MockUsersService = {
@@ -35,12 +36,12 @@ type MockJwtService = {
 
 describe('AuthService', () => {
   let service: AuthService;
+  let authRepository: MockAuthRepository;
   let usersService: MockUsersService;
   let jwtService: MockJwtService;
-  let mockDb: MockDb;
 
   const mockUser = makeUser();
-  const mockUserWithoutPassword = makeSanitizedUser();
+  const mockSanitizedUser = makeSanitizedUser();
 
   const createUserDto: CreateUserDto = {
     email: 'test@example.com',
@@ -64,14 +65,15 @@ describe('AuthService', () => {
     token: 'mock-refresh-token',
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     revokedAt: null,
-    createdAt: new Date(),
+    createdAt: new Date('2024-01-01'),
   };
 
   beforeEach(async () => {
-    mockDb = {
-      select: jest.fn(),
-      insert: jest.fn(),
-      update: jest.fn(),
+    authRepository = {
+      findValidToken: jest.fn(),
+      revokeById: jest.fn(),
+      revokeByToken: jest.fn(),
+      create: jest.fn(),
     };
 
     usersService = {
@@ -91,7 +93,7 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: DRIZZLE, useValue: mockDb },
+        { provide: AuthRepository, useValue: authRepository },
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: mockConfigService },
@@ -107,12 +109,8 @@ describe('AuthService', () => {
 
   describe('register', () => {
     it('should register a new user and return tokens', async () => {
-      usersService.create.mockResolvedValue(mockUserWithoutPassword);
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
+      usersService.create.mockResolvedValue(mockSanitizedUser);
+      authRepository.create.mockResolvedValue(undefined);
 
       const result = await service.register(createUserDto);
 
@@ -128,11 +126,7 @@ describe('AuthService', () => {
     it('should login successfully and return user with tokens', async () => {
       usersService.findByEmailOrNickname.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
+      authRepository.create.mockResolvedValue(undefined);
 
       const result = await service.login(loginDto);
 
@@ -185,22 +179,10 @@ describe('AuthService', () => {
 
   describe('refresh', () => {
     it('should refresh tokens successfully', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
-
-      usersService.findById.mockResolvedValue(mockUserWithoutPassword);
-
-      mockDb.update.mockReturnValue({
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
-
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
+      authRepository.findValidToken.mockResolvedValue(mockRefreshToken);
+      usersService.findById.mockResolvedValue(mockSanitizedUser);
+      authRepository.revokeById.mockResolvedValue(undefined);
+      authRepository.create.mockResolvedValue(undefined);
 
       const result = await service.refresh('mock-refresh-token');
 
@@ -210,13 +192,13 @@ describe('AuthService', () => {
       expect(usersService.findById).toHaveBeenCalledWith(
         mockRefreshToken.userId,
       );
+      expect(authRepository.revokeById).toHaveBeenCalledWith(
+        mockRefreshToken.id,
+      );
     });
 
     it('should throw UnauthorizedException if refresh token not found', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
-      });
+      authRepository.findValidToken.mockResolvedValue(null);
 
       await expect(service.refresh('invalid-token')).rejects.toThrow(
         UnauthorizedException,
@@ -226,12 +208,8 @@ describe('AuthService', () => {
       );
     });
 
-    it('should throw UnauthorizedException if refresh token is revoked', async () => {
-      const revokedToken = { ...mockRefreshToken, revokedAt: new Date() };
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([revokedToken]),
-      });
+    it('should throw UnauthorizedException if refresh token is revoked or expired', async () => {
+      authRepository.findValidToken.mockResolvedValue(null);
 
       await expect(service.refresh('revoked-token')).rejects.toThrow(
         UnauthorizedException,
@@ -240,12 +218,7 @@ describe('AuthService', () => {
 
     it('should throw UnauthorizedException if user is inactive', async () => {
       const inactiveUser = makeSanitizedUser({ isActive: false });
-
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
-
+      authRepository.findValidToken.mockResolvedValue(mockRefreshToken);
       usersService.findById.mockResolvedValue(inactiveUser);
 
       await expect(service.refresh('mock-refresh-token')).rejects.toThrow(
@@ -259,15 +232,14 @@ describe('AuthService', () => {
 
   describe('logout', () => {
     it('should logout successfully', async () => {
-      mockDb.update.mockReturnValue({
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([mockRefreshToken]),
-      });
+      authRepository.revokeByToken.mockResolvedValue(undefined);
 
       const result = await service.logout('mock-refresh-token');
 
       expect(result).toEqual({ message: 'Logged out successfully' });
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(authRepository.revokeByToken).toHaveBeenCalledWith(
+        'mock-refresh-token',
+      );
     });
   });
 

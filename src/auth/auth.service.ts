@@ -1,24 +1,22 @@
-import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { eq, and, isNull, gt } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { DRIZZLE } from '@/database/drizzle.module';
-import type { DrizzleDB } from '@/database/db';
-import { refreshTokens, users } from '@/database/schema';
+import { AuthRepository } from './auth.repository';
 import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import type { SanitizedUser } from '@/users/types/users.types';
 import type { JwtPayload } from './strategies/jwt.strategy';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @Inject(DRIZZLE) private db: DrizzleDB,
-    private usersService: UsersService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private readonly authRepository: AuthRepository,
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(createUserDto: CreateUserDto) {
@@ -61,16 +59,7 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    const [storedToken] = await this.db
-      .select()
-      .from(refreshTokens)
-      .where(
-        and(
-          eq(refreshTokens.token, refreshToken),
-          isNull(refreshTokens.revokedAt),
-          gt(refreshTokens.expiresAt, new Date()),
-        ),
-      );
+    const storedToken = await this.authRepository.findValidToken(refreshToken);
 
     if (!storedToken) {
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -82,10 +71,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found or inactive');
     }
 
-    await this.db
-      .update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(refreshTokens.id, storedToken.id));
+    await this.authRepository.revokeById(storedToken.id);
 
     const tokens = await this.generateTokens(user);
 
@@ -96,17 +82,12 @@ export class AuthService {
   }
 
   async logout(refreshToken: string) {
-    await this.db
-      .update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(refreshTokens.token, refreshToken));
+    await this.authRepository.revokeByToken(refreshToken);
 
     return { message: 'Logged out successfully' };
   }
 
-  private async generateTokens(
-    user: Omit<typeof users.$inferSelect, 'passwordHash'>,
-  ) {
+  private async generateTokens(user: SanitizedUser) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -128,11 +109,7 @@ export class AuthService {
       this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
     const expiresAt = this.calculateExpiration(expiresIn);
 
-    await this.db.insert(refreshTokens).values({
-      userId,
-      token,
-      expiresAt,
-    });
+    await this.authRepository.create(userId, token, expiresAt);
 
     return token;
   }
