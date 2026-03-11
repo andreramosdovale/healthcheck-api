@@ -6,41 +6,44 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersRepository } from './users.repository';
-import type { User, SanitizedUser } from './types/users.types';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import type {
+  User,
+  SanitizedUser,
+  CreateUserInput,
+  UpdateUserInput,
+} from './types/users.types';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
 
-  async create(createUserDto: CreateUserDto): Promise<SanitizedUser> {
-    if (!createUserDto.termsAccepted) {
+  async create(input: CreateUserInput): Promise<SanitizedUser> {
+    if (!input.termsAccepted) {
       throw new BadRequestException('Terms must be accepted');
     }
 
     const existing = await this.usersRepository.findConflictingUser(
-      createUserDto.email,
-      createUserDto.nickname,
+      input.email,
+      input.nickname,
     );
 
     if (existing) {
-      if (existing.email === createUserDto.email) {
+      if (existing.email === input.email) {
         throw new ConflictException('Email already exists');
       }
       throw new ConflictException('Nickname already exists');
     }
 
-    const passwordHash = await bcrypt.hash(createUserDto.password, 12);
+    const passwordHash = await bcrypt.hash(input.password, 12);
 
     const user = await this.usersRepository.create({
-      email: createUserDto.email,
-      nickname: createUserDto.nickname,
+      email: input.email,
+      nickname: input.nickname,
       passwordHash,
-      name: createUserDto.name,
-      birthDate: createUserDto.birthDate,
-      sex: createUserDto.sex,
-      height: createUserDto.height.toString(),
+      name: input.name,
+      birthDate: input.birthDate,
+      sex: input.sex,
+      height: input.height.toString(),
       termsAccepted: true,
       termsAcceptedAt: new Date(),
     });
@@ -75,15 +78,12 @@ export class UsersService {
     return this.usersRepository.findByEmailOrNickname(login);
   }
 
-  async update(
-    id: string,
-    updateUserDto: UpdateUserDto,
-  ): Promise<SanitizedUser> {
+  async update(id: string, input: UpdateUserInput): Promise<SanitizedUser> {
     await this.findById(id);
 
     const user = await this.usersRepository.update(id, {
-      ...updateUserDto,
-      height: updateUserDto.height?.toString(),
+      name: input.name,
+      height: input.height?.toString(),
       updatedAt: new Date(),
     });
 
@@ -96,7 +96,8 @@ export class UsersService {
   }
 
   private sanitizeUser(user: User): SanitizedUser {
-    const { ...sanitized } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _, ...sanitized } = user;
     return sanitized;
   }
 }

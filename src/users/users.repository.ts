@@ -7,7 +7,7 @@ import type { User, CreateUserData, UpdateUserData } from './types/users.types';
 
 @Injectable()
 export class UsersRepository {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
 
   async findConflictingUser(
     email: string,

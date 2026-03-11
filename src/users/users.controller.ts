@@ -23,6 +23,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { Permissions } from '@/common/decorators/permissions.decorator';
+import type { CreateUserInput, UpdateUserInput } from './types/users.types';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -35,8 +36,18 @@ export class UsersController {
   @Permissions('admin:access')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  create(@Body() dto: CreateUserDto) {
+    const input: CreateUserInput = {
+      email: dto.email,
+      nickname: dto.nickname,
+      password: dto.password,
+      name: dto.name,
+      birthDate: dto.birthDate,
+      sex: dto.sex,
+      height: dto.height,
+      termsAccepted: dto.termsAccepted,
+    };
+    return this.usersService.create(input);
   }
 
   @Get()
@@ -60,11 +71,12 @@ export class UsersController {
   @Permissions('users:update')
   @ApiOperation({ summary: 'Update user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
-    return this.usersService.update(id, updateUserDto);
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
+    const input: UpdateUserInput = {
+      name: dto.name,
+      height: dto.height,
+    };
+    return this.usersService.update(id, input);
   }
 
   @Delete(':id')
