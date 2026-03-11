@@ -7,9 +7,11 @@ import {
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '@/users/users.service';
 import { UsersRepository } from '@/users/users.repository';
-import { CreateUserDto } from '@/users/dto/create-user.dto';
-import { UpdateUserDto } from '@/users/dto/update-user.dto';
-import { makeUser } from '@test/stubs/user.stub';
+import {
+  makeUser,
+  makeCreateUserInput,
+  makeUpdateUserInput,
+} from '@test/stubs/user.stub';
 
 jest.mock('bcrypt');
 
@@ -28,16 +30,7 @@ describe('UsersService', () => {
     delete: jest.fn(),
   };
 
-  const createUserDto: CreateUserDto = {
-    email: 'test@example.com',
-    nickname: 'testuser',
-    password: 'Test@1234',
-    name: 'Test User',
-    birthDate: '1990-01-01',
-    sex: 'male',
-    height: 175,
-    termsAccepted: true,
-  };
+  const createUserInput = makeCreateUserInput();
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -56,10 +49,10 @@ describe('UsersService', () => {
 
   describe('create', () => {
     it('should throw BadRequestException when termsAccepted is false', async () => {
-      const dto = { ...createUserDto, termsAccepted: false };
+      const input = makeCreateUserInput({ termsAccepted: false });
 
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
-      await expect(service.create(dto)).rejects.toThrow(
+      await expect(service.create(input)).rejects.toThrow(BadRequestException);
+      await expect(service.create(input)).rejects.toThrow(
         'Terms must be accepted',
       );
       expect(mockRepository.findConflictingUser).not.toHaveBeenCalled();
@@ -68,10 +61,10 @@ describe('UsersService', () => {
     it('should throw ConflictException when email already exists', async () => {
       mockRepository.findConflictingUser.mockResolvedValue(makeUser());
 
-      await expect(service.create(createUserDto)).rejects.toThrow(
+      await expect(service.create(createUserInput)).rejects.toThrow(
         ConflictException,
       );
-      await expect(service.create(createUserDto)).rejects.toThrow(
+      await expect(service.create(createUserInput)).rejects.toThrow(
         'Email already exists',
       );
     });
@@ -81,10 +74,10 @@ describe('UsersService', () => {
         makeUser({ email: 'other@example.com' }),
       );
 
-      await expect(service.create(createUserDto)).rejects.toThrow(
+      await expect(service.create(createUserInput)).rejects.toThrow(
         ConflictException,
       );
-      await expect(service.create(createUserDto)).rejects.toThrow(
+      await expect(service.create(createUserInput)).rejects.toThrow(
         'Nickname already exists',
       );
     });
@@ -94,9 +87,9 @@ describe('UsersService', () => {
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashedPassword');
       mockRepository.create.mockResolvedValue(makeUser());
 
-      await service.create(createUserDto);
+      await service.create(createUserInput);
 
-      expect(bcrypt.hash).toHaveBeenCalledWith(createUserDto.password, 12);
+      expect(bcrypt.hash).toHaveBeenCalledWith(createUserInput.password, 12);
     });
 
     it('should return a sanitized user without passwordHash when successful', async () => {
@@ -104,10 +97,10 @@ describe('UsersService', () => {
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashedPassword');
       mockRepository.create.mockResolvedValue(makeUser());
 
-      const result = await service.create(createUserDto);
+      const result = await service.create(createUserInput);
 
-      expect(result).not.toHaveProperty('hashedPassword');
-      expect(result.email).toBe(createUserDto.email);
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(result.email).toBe(createUserInput.email);
     });
   });
 
@@ -220,24 +213,24 @@ describe('UsersService', () => {
   });
 
   describe('update', () => {
-    const updateUserDto: UpdateUserDto = { name: 'Updated Name', height: 180 };
+    const updateUserInput = makeUpdateUserInput();
 
     it('should return a sanitized updated user when successful', async () => {
       const updatedUser = makeUser({ name: 'Updated Name', height: '180' });
       mockRepository.findById.mockResolvedValue(makeUser());
       mockRepository.update.mockResolvedValue(updatedUser);
 
-      const result = await service.update(makeUser().id, updateUserDto);
+      const result = await service.update(makeUser().id, updateUserInput);
 
-      expect(result).not.toHaveProperty('hashedPassword');
-      expect(result.name).toBe(updateUserDto.name);
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(result.name).toBe(updateUserInput.name);
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
       mockRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.update('non-existent-id', updateUserDto),
+        service.update('non-existent-id', updateUserInput),
       ).rejects.toThrow(NotFoundException);
       expect(mockRepository.update).not.toHaveBeenCalled();
     });
@@ -246,7 +239,7 @@ describe('UsersService', () => {
       mockRepository.findById.mockResolvedValue(makeUser());
       mockRepository.update.mockResolvedValue(makeUser());
 
-      await service.update(makeUser().id, updateUserDto);
+      await service.update(makeUser().id, updateUserInput);
 
       expect(mockRepository.update).toHaveBeenCalledWith(
         makeUser().id,

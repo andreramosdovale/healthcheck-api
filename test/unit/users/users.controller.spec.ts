@@ -5,7 +5,7 @@ import { CreateUserDto } from '@/users/dto/create-user.dto';
 import { UpdateUserDto } from '@/users/dto/update-user.dto';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
-import { makeSanitizedUser } from '@test/stubs/user.stub';
+import { makeSanitizedUser, makeCreateUserInput } from '@test/stubs/user.stub';
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -66,13 +66,15 @@ describe('UsersController', () => {
   });
 
   describe('create', () => {
-    it('should call UsersService.create with the dto and return its result', async () => {
+    it('should call UsersService.create with mapped input and return its result', async () => {
       const user = makeSanitizedUser();
       mockUsersService.create.mockResolvedValue(user);
 
       const result = await controller.create(createUserDto);
 
-      expect(mockUsersService.create).toHaveBeenCalledWith(createUserDto);
+      expect(mockUsersService.create).toHaveBeenCalledWith(
+        makeCreateUserInput(),
+      );
       expect(mockUsersService.create).toHaveBeenCalledTimes(1);
       expect(result).toEqual(user);
     });
@@ -115,7 +117,7 @@ describe('UsersController', () => {
   });
 
   describe('update', () => {
-    it('should call UsersService.update with id and dto and return its result', async () => {
+    it('should call UsersService.update with id and mapped input and return its result', async () => {
       const updated = makeSanitizedUser({
         name: 'Updated Name',
         height: '180',
@@ -124,10 +126,10 @@ describe('UsersController', () => {
 
       const result = await controller.update(updated.id, updateUserDto);
 
-      expect(mockUsersService.update).toHaveBeenCalledWith(
-        updated.id,
-        updateUserDto,
-      );
+      expect(mockUsersService.update).toHaveBeenCalledWith(updated.id, {
+        name: updateUserDto.name,
+        height: updateUserDto.height,
+      });
       expect(mockUsersService.update).toHaveBeenCalledTimes(1);
       expect(result).toEqual(updated);
     });
