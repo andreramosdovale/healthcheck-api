@@ -34,6 +34,36 @@ Class names use PascalCase. File names always use kebab-case.
 - Update DTOs extend Create DTOs using `PartialType` from `@nestjs/mapped-types`
 - DTOs must not be used as domain types inside services or repositories — use the `types/` file
 
+### Input types pattern
+
+When a service method receives data that originates from a DTO, define a `*Input` interface
+in the module's `types/` file. The **controller** maps the DTO to that type before calling
+the service. The **service** only knows about `*Input`, never about DTOs.
+
+```ts
+// types/users.types.ts
+export interface CreateUserInput {
+  email: string;
+  password: string;
+  // ... domain fields, no class-validator decorators
+}
+
+// users.controller.ts — maps DTO → Input
+create(@Body() dto: CreateUserDto) {
+  const input: CreateUserInput = { email: dto.email, ... };
+  return this.usersService.create(input);
+}
+
+// users.service.ts — receives Input, not DTO
+async create(input: CreateUserInput): Promise<SanitizedUser> { ... }
+```
+
+Naming: `Create<Entity>Input`, `Update<Entity>Input`.
+
+When the repository needs data shaped differently from the service input (e.g. `password`
+becomes `passwordHash`, timestamps are added), define a separate `*Data` interface:
+`Create<Entity>Data`, `Update<Entity>Data`. These are repository-level types only.
+
 ---
 
 ## Imports
