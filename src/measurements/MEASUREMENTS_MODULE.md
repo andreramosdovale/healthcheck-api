@@ -20,7 +20,7 @@ This module handles body composition measurements and calculations.
 | POST   | `/measurements`     | `measurements:create` | Create measurement       |
 | GET    | `/measurements`     | `measurements:read`   | List user's measurements |
 | GET    | `/measurements/:id` | `measurements:read`   | Get measurement by ID    |
-| PUT    | `/measurements/:id` | `measurements:update` | Update measurement       |
+| PATCH  | `/measurements/:id` | `measurements:update` | Partially update measurement |
 | DELETE | `/measurements/:id` | `measurements:delete` | Delete measurement       |
 
 ---
@@ -31,22 +31,29 @@ This module handles body composition measurements and calculations.
 
 - User can only create measurements for themselves (uses `req.user.id`)
 - `weight` is required, all other fields are optional
-- If **any** skin-fold field is provided, **all 7** must be provided — otherwise throws `BadRequestException`
+- If **any** skinfold field is provided, **all 7** must be provided — otherwise throws `BadRequestException` with `errorCode: 'SKINFOLDS_INCOMPLETE'`
 - Circumferences are independent — any combination is valid
 - Body fat is calculated automatically if sufficient data is present
+- Fields inside `calculated` are read-only and cannot be set manually — they are always derived from the provided input
 
-### Measurement Update
+### Measurement Update (PATCH)
 
 - Ownership is verified before update — throws 404 if measurement not found or belongs to another user
 - All fields are optional — only provided fields overwrite existing values
 - Body fat is **recalculated** after update by merging new values with existing ones
-- Calculated fields (`bodyFatPercentage`, `navyBodyFatPercentage`, `leanMass`, `fatMass`)
-  are always recomputed from the merged state and cannot be set manually
+- Fields inside `calculated` are always recomputed from the merged state and are ignored if included in the request body
 
 ### Measurement List
 
-- Returns all measurements for the authenticated user
-- Sorted by `measurementDate` descending (most recent first)
+- Returns measurements for the authenticated user, sorted by `measurementDate` descending (most recent first)
+- Supports filtering and pagination via query parameters (see below)
+
+**Query Parameters:**
+
+- `limit` (optional, default 20, max 100): Number of results per page
+- `offset` (optional, default 0): Number of results to skip
+- `from` (optional): ISO date string (`YYYY-MM-DD`) — filters measurements on or after this date
+- `to` (optional): ISO date string (`YYYY-MM-DD`) — filters measurements on or before this date
 
 ### Body Fat Calculation Priority
 
@@ -60,6 +67,17 @@ This module handles body composition measurements and calculations.
 
 Calculations are performed automatically on create/update when sufficient data is provided.
 
+### Lean Mass and Fat Mass
+
+`leanMass` and `fatMass` are calculated whenever **any** body fat method produces a result (Pollock or Navy):
+
+```
+leanMass = weight × (1 - bodyFatPercentage / 100)
+fatMass  = weight × (bodyFatPercentage / 100)
+```
+
+`bodyFatPercentage` used here is the resolved value (Pollock > Navy). If neither method has sufficient data, all three fields are `null`.
+
 ### Ownership
 
 - Users can only access their own measurements
@@ -70,7 +88,7 @@ Calculations are performed automatically on create/update when sufficient data i
 
 ## Skinfold Measurements (7-fold)
 
-All values in millimeters (mm), range 1-100:
+All values in millimeters (mm), range 1–100:
 
 | Field       | Description                   |
 | ----------- | ----------------------------- |
@@ -82,13 +100,21 @@ All values in millimeters (mm), range 1-100:
 | abdominal   | Vertical fold beside navel    |
 | thigh       | Front of thigh                |
 
-**Rule**: If one skinfold is provided, all 7 must be provided.
+**Rule**: All 7 must be provided together or none at all. Sending a partial set returns:
+
+```json
+{
+  "message": "All 7 skinfold fields must be provided together or none at all.",
+  "errorCode": "SKINFOLDS_INCOMPLETE",
+  "missingFields": ["midaxillary", "suprailiac"]
+}
+```
 
 ---
 
 ## Circumference Measurements
 
-All values in centimeters (cm), range 10-200:
+All values in centimeters (cm), range 10–200:
 
 | Field                                | Description      | Required for Navy |
 | ------------------------------------ | ---------------- | ----------------- |
@@ -102,16 +128,20 @@ All values in centimeters (cm), range 10-200:
 | leftBicepRelaxed / rightBicepRelaxed | Arm relaxed      | No                |
 | leftBicepFlexed / rightBicepFlexed   | Arm flexed       | No                |
 
+> Bilateral fields (`leftThigh`, `rightThigh`, etc.) are stored for reference only and are not used in any calculation.
+
 ---
 
 ## Calculated Fields
 
-| Field                 | Formula                 | When Calculated                              |
-| --------------------- | ----------------------- | -------------------------------------------- |
-| bodyFatPercentage     | Pollock 7-fold          | When all 7 skinfolds provided                |
-| navyBodyFatPercentage | Navy method             | When neck + waist (+ hip for women) provided |
-| leanMass              | weight × (1 - bodyFat%) | When body fat calculated                     |
-| fatMass               | weight × bodyFat%       | When body fat calculated                     |
+Calculated fields are returned inside the `calculated` object in the response. They are **never accepted as input**.
+
+| Field               | Formula                              | When Calculated                                         |
+| ------------------- | ------------------------------------ | ------------------------------------------------------- |
+| bodyFatPercentage   | Pollock 7-fold (preferred) or Navy   | When sufficient data exists for either method           |
+| bodyFatMethod       | `'pollock'` or `'navy'`              | Indicates which method produced `bodyFatPercentage`     |
+| leanMass            | `weight × (1 − bodyFatPercentage%)` | When `bodyFatPercentage` is available (either method)   |
+| fatMass             | `weight × bodyFatPercentage%`        | When `bodyFatPercentage` is available (either method)   |
 
 ---
 
@@ -151,6 +181,59 @@ bodyFat% = 495 / (1.29579 - 0.35004 × log10(waist + hip - neck) + 0.221 × log1
 
 ---
 
+## Response Type
+
+```typescript
+// src/measurements/types/measurements.types.ts
+
+interface SkinfoldData {
+  triceps: number;
+  subscapular: number;
+  chest: number;
+  midaxillary: number;
+  suprailiac: number;
+  abdominal: number;
+  thigh: number;
+}
+
+interface CircumferenceData {
+  neck: number | null;
+  waist: number | null;
+  hip: number | null;
+  shoulders: number | null;
+  chestCirc: number | null;
+  leftThigh: number | null;
+  rightThigh: number | null;
+  leftCalf: number | null;
+  rightCalf: number | null;
+  leftBicepRelaxed: number | null;
+  rightBicepRelaxed: number | null;
+  leftBicepFlexed: number | null;
+  rightBicepFlexed: number | null;
+}
+
+interface CalculatedData {
+  bodyFatPercentage: number | null;
+  bodyFatMethod: 'pollock' | 'navy' | null;
+  leanMass: number | null;
+  fatMass: number | null;
+}
+
+export interface Measurement {
+  id: string;
+  userId: string;
+  measurementDate: string;
+  weight: number;
+  skinfolds: SkinfoldData | null;
+  circumferences: CircumferenceData | null;
+  calculated: CalculatedData;
+  createdAt: string;
+  updatedAt: string | null;
+}
+```
+
+---
+
 ## Database Table: `measurements`
 
 | Column                   | Type         | Constraints                     |
@@ -162,11 +245,13 @@ bodyFat% = 495 / (1.29579 - 0.35004 × log10(waist + hip - neck) + 0.221 × log1
 | triceps...thigh          | DECIMAL(5,2) | NULL (7 skinfold columns)       |
 | neck...rightBicepFlexed  | DECIMAL(5,2) | NULL (13 circumference columns) |
 | body_fat_percentage      | DECIMAL(5,2) | NULL (calculated)               |
-| navy_body_fat_percentage | DECIMAL(5,2) | NULL (calculated)               |
+| navy_body_fat_percentage | DECIMAL(5,2) | NULL (calculated, internal use) |
 | lean_mass                | DECIMAL(5,2) | NULL (calculated)               |
 | fat_mass                 | DECIMAL(5,2) | NULL (calculated)               |
 | created_at               | TIMESTAMP    | NOT NULL                        |
 | updated_at               | TIMESTAMP    | NULL                            |
+
+> `navy_body_fat_percentage` is stored in the database for recalculation purposes but is not exposed directly in the API response. The resolved value is returned as `calculated.bodyFatPercentage` with `calculated.bodyFatMethod` indicating the source.
 
 ---
 
@@ -175,9 +260,9 @@ bodyFat% = 495 / (1.29579 - 0.35004 × log10(waist + hip - neck) + 0.221 × log1
 | Field           | Rules                 |
 | --------------- | --------------------- |
 | measurementDate | Valid ISO date string |
-| weight          | 20-500 kg             |
-| skinfolds       | 1-100 mm each         |
-| circumferences  | 10-200 cm each        |
+| weight          | 20–500 kg             |
+| skinfolds       | 1–100 mm each         |
+| circumferences  | 10–200 cm each        |
 
 ---
 
