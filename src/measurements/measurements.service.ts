@@ -4,11 +4,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { MeasurementsRepository } from './measurements.repository';
-import { CreateMeasurementDto } from './dto/create-measurement.dto';
-import { UpdateMeasurementDto } from './dto/update-measurement.dto';
 import type {
-  Measurement,
   MeasurementUpdateData,
+  CreateMeasurementInput,
+  UpdateMeasurementInput,
+  ListMeasurementsInput,
+  MeasurementResponse,
 } from './types/measurements.types';
 import {
   calculateAge,
@@ -18,6 +19,7 @@ import {
   canCalculateNavyMale,
   canCalculateNavyFemale,
 } from './utils/body-fat-calculator';
+import { toMeasurementResponse } from './utils/measurement.mapper';
 
 type DtoUpdateValues = Omit<
   MeasurementUpdateData,
@@ -28,6 +30,16 @@ type DtoUpdateValues = Omit<
   | 'fatMass'
 >;
 
+const SKINFOLD_FIELDS = [
+  'triceps',
+  'subscapular',
+  'chest',
+  'midaxillary',
+  'suprailiac',
+  'abdominal',
+  'thigh',
+] as const;
+
 @Injectable()
 export class MeasurementsService {
   constructor(
@@ -36,46 +48,34 @@ export class MeasurementsService {
 
   async create(
     userId: string,
-    createMeasurementDto: CreateMeasurementDto,
-  ): Promise<Measurement> {
+    input: CreateMeasurementInput,
+  ): Promise<MeasurementResponse> {
     const user = await this.measurementsRepository.findUserById(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const hasAnySkinfold =
-      createMeasurementDto.triceps !== undefined ||
-      createMeasurementDto.subscapular !== undefined ||
-      createMeasurementDto.chest !== undefined ||
-      createMeasurementDto.midaxillary !== undefined ||
-      createMeasurementDto.suprailiac !== undefined ||
-      createMeasurementDto.abdominal !== undefined ||
-      createMeasurementDto.thigh !== undefined;
+    const hasAnySkinfold = SKINFOLD_FIELDS.some((f) => input[f] !== undefined);
 
-    if (hasAnySkinfold && !hasAllSkinfolds(createMeasurementDto)) {
-      throw new BadRequestException(
-        'All 7 skinfolds are required when providing skinfold measurements',
-      );
+    if (hasAnySkinfold && !hasAllSkinfolds(input)) {
+      const missingFields = SKINFOLD_FIELDS.filter((f) => input[f] === undefined);
+      throw new BadRequestException({
+        message: 'All 7 skinfold fields must be provided together or none at all.',
+        errorCode: 'SKINFOLDS_INCOMPLETE',
+        missingFields,
+      });
     }
 
-    const age = calculateAge(
-      user.birthDate,
-      createMeasurementDto.measurementDate,
-    );
+    const age = calculateAge(user.birthDate, input.measurementDate);
 
     let bodyFatPercentage: number | null = null;
     let navyBodyFatPercentage: number | null = null;
     let leanMass: number | null = null;
     let fatMass: number | null = null;
 
-    if (hasAllSkinfolds(createMeasurementDto)) {
-      const pollockResult = calculatePollockBodyFat(
-        createMeasurementDto,
-        age,
-        user.sex,
-        createMeasurementDto.weight,
-      );
+    if (hasAllSkinfolds(input)) {
+      const pollockResult = calculatePollockBodyFat(input, age, user.sex, input.weight);
 
       if (pollockResult) {
         bodyFatPercentage = pollockResult.bodyFatPercentage;
@@ -86,9 +86,9 @@ export class MeasurementsService {
 
     const height = parseFloat(user.height);
     const navyInput = {
-      neck: createMeasurementDto.neck ?? undefined,
-      waist: createMeasurementDto.waist ?? undefined,
-      hip: createMeasurementDto.hip ?? undefined,
+      neck: input.neck ?? undefined,
+      waist: input.waist ?? undefined,
+      hip: input.hip ?? undefined,
       height,
     };
 
@@ -99,14 +99,9 @@ export class MeasurementsService {
 
     if (canCalculateNavy) {
       const navyResult = calculateNavyBodyFat(
-        {
-          neck: navyInput.neck!,
-          waist: navyInput.waist!,
-          hip: navyInput.hip,
-          height,
-        },
+        { neck: navyInput.neck!, waist: navyInput.waist!, hip: navyInput.hip, height },
         user.sex,
-        createMeasurementDto.weight,
+        input.weight,
       );
 
       if (navyResult) {
@@ -119,60 +114,67 @@ export class MeasurementsService {
       }
     }
 
-    return this.measurementsRepository.insert({
+    const row = await this.measurementsRepository.insert({
       userId,
-      measurementDate: createMeasurementDto.measurementDate,
-      weight: createMeasurementDto.weight.toString(),
-      // Skinfolds
-      triceps: createMeasurementDto.triceps?.toString(),
-      subscapular: createMeasurementDto.subscapular?.toString(),
-      chest: createMeasurementDto.chest?.toString(),
-      midaxillary: createMeasurementDto.midaxillary?.toString(),
-      suprailiac: createMeasurementDto.suprailiac?.toString(),
-      abdominal: createMeasurementDto.abdominal?.toString(),
-      thigh: createMeasurementDto.thigh?.toString(),
-      // Circumferences
-      neck: createMeasurementDto.neck?.toString(),
-      shoulders: createMeasurementDto.shoulders?.toString(),
-      chestCirc: createMeasurementDto.chestCirc?.toString(),
-      waist: createMeasurementDto.waist?.toString(),
-      hip: createMeasurementDto.hip?.toString(),
-      leftThigh: createMeasurementDto.leftThigh?.toString(),
-      rightThigh: createMeasurementDto.rightThigh?.toString(),
-      leftCalf: createMeasurementDto.leftCalf?.toString(),
-      rightCalf: createMeasurementDto.rightCalf?.toString(),
-      leftBicepRelaxed: createMeasurementDto.leftBicepRelaxed?.toString(),
-      rightBicepRelaxed: createMeasurementDto.rightBicepRelaxed?.toString(),
-      leftBicepFlexed: createMeasurementDto.leftBicepFlexed?.toString(),
-      rightBicepFlexed: createMeasurementDto.rightBicepFlexed?.toString(),
-      // Calculated
+      measurementDate: input.measurementDate,
+      weight: input.weight.toString(),
+      triceps: input.triceps?.toString(),
+      subscapular: input.subscapular?.toString(),
+      chest: input.chest?.toString(),
+      midaxillary: input.midaxillary?.toString(),
+      suprailiac: input.suprailiac?.toString(),
+      abdominal: input.abdominal?.toString(),
+      thigh: input.thigh?.toString(),
+      neck: input.neck?.toString(),
+      shoulders: input.shoulders?.toString(),
+      chestCirc: input.chestCirc?.toString(),
+      waist: input.waist?.toString(),
+      hip: input.hip?.toString(),
+      leftThigh: input.leftThigh?.toString(),
+      rightThigh: input.rightThigh?.toString(),
+      leftCalf: input.leftCalf?.toString(),
+      rightCalf: input.rightCalf?.toString(),
+      leftBicepRelaxed: input.leftBicepRelaxed?.toString(),
+      rightBicepRelaxed: input.rightBicepRelaxed?.toString(),
+      leftBicepFlexed: input.leftBicepFlexed?.toString(),
+      rightBicepFlexed: input.rightBicepFlexed?.toString(),
       bodyFatPercentage: bodyFatPercentage?.toString(),
       navyBodyFatPercentage: navyBodyFatPercentage?.toString(),
       leanMass: leanMass?.toString(),
       fatMass: fatMass?.toString(),
     });
+
+    return toMeasurementResponse(row);
   }
 
-  async findAllByUser(userId: string): Promise<Measurement[]> {
-    return this.measurementsRepository.findAllByUser(userId);
+  async findAllByUser(
+    userId: string,
+    filters: ListMeasurementsInput,
+  ): Promise<MeasurementResponse[]> {
+    const rows = await this.measurementsRepository.findAllByUser(userId, filters);
+    return rows.map(toMeasurementResponse);
   }
 
-  async findOne(id: string, userId: string): Promise<Measurement> {
+  async findOne(id: string, userId: string): Promise<MeasurementResponse> {
     const measurement = await this.measurementsRepository.findById(id, userId);
 
     if (!measurement) {
       throw new NotFoundException('Measurement not found');
     }
 
-    return measurement;
+    return toMeasurementResponse(measurement);
   }
 
   async update(
     id: string,
     userId: string,
-    updateMeasurementDto: UpdateMeasurementDto,
-  ): Promise<Measurement> {
-    const existing = await this.findOne(id, userId);
+    input: UpdateMeasurementInput,
+  ): Promise<MeasurementResponse> {
+    const existing = await this.measurementsRepository.findById(id, userId);
+
+    if (!existing) {
+      throw new NotFoundException('Measurement not found');
+    }
 
     const user = await this.measurementsRepository.findUserById(userId);
     if (!user) {
@@ -180,44 +182,21 @@ export class MeasurementsService {
     }
 
     const skinfolds = {
-      triceps: this.mergeNum(updateMeasurementDto.triceps, existing.triceps),
-      subscapular: this.mergeNum(
-        updateMeasurementDto.subscapular,
-        existing.subscapular,
-      ),
-      chest: this.mergeNum(updateMeasurementDto.chest, existing.chest),
-      midaxillary: this.mergeNum(
-        updateMeasurementDto.midaxillary,
-        existing.midaxillary,
-      ),
-      suprailiac: this.mergeNum(
-        updateMeasurementDto.suprailiac,
-        existing.suprailiac,
-      ),
-      abdominal: this.mergeNum(
-        updateMeasurementDto.abdominal,
-        existing.abdominal,
-      ),
-      thigh: this.mergeNum(updateMeasurementDto.thigh, existing.thigh),
+      triceps: this.mergeNum(input.triceps, existing.triceps),
+      subscapular: this.mergeNum(input.subscapular, existing.subscapular),
+      chest: this.mergeNum(input.chest, existing.chest),
+      midaxillary: this.mergeNum(input.midaxillary, existing.midaxillary),
+      suprailiac: this.mergeNum(input.suprailiac, existing.suprailiac),
+      abdominal: this.mergeNum(input.abdominal, existing.abdominal),
+      thigh: this.mergeNum(input.thigh, existing.thigh),
     };
 
-    const neckMerged = this.mergeNumOrNull(
-      updateMeasurementDto.neck,
-      existing.neck,
-    );
-    const waistMerged = this.mergeNumOrNull(
-      updateMeasurementDto.waist,
-      existing.waist,
-    );
-    const hipMerged = this.mergeNumOrNull(
-      updateMeasurementDto.hip,
-      existing.hip,
-    );
+    const neckMerged = this.mergeNumOrNull(input.neck, existing.neck);
+    const waistMerged = this.mergeNumOrNull(input.waist, existing.waist);
+    const hipMerged = this.mergeNumOrNull(input.hip, existing.hip);
 
-    const mergedDate =
-      updateMeasurementDto.measurementDate ?? existing.measurementDate;
-    const mergedWeight =
-      updateMeasurementDto.weight ?? parseFloat(existing.weight);
+    const mergedDate = input.measurementDate ?? existing.measurementDate;
+    const mergedWeight = input.weight ?? parseFloat(existing.weight);
 
     const age = calculateAge(user.birthDate, mergedDate);
     const height = parseFloat(user.height);
@@ -228,12 +207,7 @@ export class MeasurementsService {
     let fatMass: number | null = null;
 
     if (hasAllSkinfolds(skinfolds)) {
-      const pollockResult = calculatePollockBodyFat(
-        skinfolds,
-        age,
-        user.sex,
-        mergedWeight,
-      );
+      const pollockResult = calculatePollockBodyFat(skinfolds, age, user.sex, mergedWeight);
       if (pollockResult) {
         bodyFatPercentage = pollockResult.bodyFatPercentage;
         leanMass = pollockResult.leanMass;
@@ -255,12 +229,7 @@ export class MeasurementsService {
 
     if (canNavy) {
       const navyResult = calculateNavyBodyFat(
-        {
-          neck: navyInput.neck!,
-          waist: navyInput.waist!,
-          hip: navyInput.hip,
-          height,
-        },
+        { neck: navyInput.neck!, waist: navyInput.waist!, hip: navyInput.hip, height },
         user.sex,
         mergedWeight,
       );
@@ -274,7 +243,7 @@ export class MeasurementsService {
     }
 
     const updateData: MeasurementUpdateData = {
-      ...this.toDbValues(updateMeasurementDto),
+      ...this.toDbValues(input),
       bodyFatPercentage: bodyFatPercentage?.toString() ?? null,
       navyBodyFatPercentage: navyBodyFatPercentage?.toString() ?? null,
       leanMass: leanMass?.toString() ?? null,
@@ -282,7 +251,8 @@ export class MeasurementsService {
       updatedAt: new Date(),
     };
 
-    return this.measurementsRepository.update(id, userId, updateData);
+    const row = await this.measurementsRepository.update(id, userId, updateData);
+    return toMeasurementResponse(row);
   }
 
   async remove(id: string, userId: string): Promise<void> {
@@ -312,10 +282,10 @@ export class MeasurementsService {
         : null;
   }
 
-  private toDbValues(dto: Partial<CreateMeasurementDto>): DtoUpdateValues {
+  private toDbValues(input: UpdateMeasurementInput): DtoUpdateValues {
     const result: Record<string, string | null | undefined> = {};
 
-    for (const [key, value] of Object.entries(dto)) {
+    for (const [key, value] of Object.entries(input)) {
       if (value !== undefined) {
         result[key] =
           value === null

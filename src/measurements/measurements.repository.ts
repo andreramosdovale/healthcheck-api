@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, gte, lte } from 'drizzle-orm';
 import { DRIZZLE } from '@/database/drizzle.module';
 import type { DrizzleDB } from '@/database/db';
 import { measurements, users } from '@/database/schema';
@@ -8,6 +8,7 @@ import type {
   MeasurementInsertData,
   MeasurementUpdateData,
   UserForMeasurement,
+  ListMeasurementsInput,
 } from './types/measurements.types';
 
 @Injectable()
@@ -27,12 +28,27 @@ export class MeasurementsRepository {
     return user ?? null;
   }
 
-  async findAllByUser(userId: string): Promise<Measurement[]> {
+  async findAllByUser(
+    userId: string,
+    filters: ListMeasurementsInput,
+  ): Promise<Measurement[]> {
+    const conditions = [eq(measurements.userId, userId)];
+
+    if (filters.from) {
+      conditions.push(gte(measurements.measurementDate, filters.from));
+    }
+
+    if (filters.to) {
+      conditions.push(lte(measurements.measurementDate, filters.to));
+    }
+
     return this.db
       .select()
       .from(measurements)
-      .where(eq(measurements.userId, userId))
-      .orderBy(desc(measurements.measurementDate));
+      .where(and(...conditions))
+      .orderBy(desc(measurements.measurementDate))
+      .limit(filters.limit)
+      .offset(filters.offset);
   }
 
   async findById(id: string, userId: string): Promise<Measurement | null> {
