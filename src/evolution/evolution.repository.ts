@@ -1,16 +1,26 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and, gte, lte } from 'drizzle-orm';
 import { DRIZZLE } from '@/database/drizzle.module';
 import type { DrizzleDB } from '@/database/db';
 import { measurements } from '@/database/schema';
 import type { Measurement } from '@/measurements/types/measurements.types';
-import type { SummaryPoint } from './types/evolution.types';
+import type { GetSummaryInput, SummaryPoint } from './types/evolution.types';
 
 @Injectable()
 export class EvolutionRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
 
-  async getSummary(userId: string, limit: number): Promise<SummaryPoint[]> {
+  async getSummary(userId: string, input: GetSummaryInput): Promise<SummaryPoint[]> {
+    const conditions = [eq(measurements.userId, userId)];
+
+    if (input.from) {
+      conditions.push(gte(measurements.measurementDate, input.from));
+    }
+
+    if (input.to) {
+      conditions.push(lte(measurements.measurementDate, input.to));
+    }
+
     const result = await this.db
       .select({
         date: measurements.measurementDate,
@@ -21,22 +31,27 @@ export class EvolutionRepository {
         fatMass: measurements.fatMass,
       })
       .from(measurements)
-      .where(eq(measurements.userId, userId))
+      .where(and(...conditions))
       .orderBy(asc(measurements.measurementDate))
-      .limit(limit);
+      .limit(input.limit);
 
-    return result.map((r) => ({
-      date: r.date,
-      weight: parseFloat(r.weight),
-      bodyFatPercentage: r.bodyFatPercentage
-        ? parseFloat(r.bodyFatPercentage)
-        : null,
-      navyBodyFatPercentage: r.navyBodyFatPercentage
-        ? parseFloat(r.navyBodyFatPercentage)
-        : null,
-      leanMass: r.leanMass ? parseFloat(r.leanMass) : null,
-      fatMass: r.fatMass ? parseFloat(r.fatMass) : null,
-    }));
+    return result.map((r) => {
+      const hasPollock = r.bodyFatPercentage != null;
+      const hasNavy = r.navyBodyFatPercentage != null;
+
+      return {
+        date: r.date,
+        weight: parseFloat(r.weight),
+        bodyFatPercentage: hasPollock
+          ? parseFloat(r.bodyFatPercentage!)
+          : hasNavy
+            ? parseFloat(r.navyBodyFatPercentage!)
+            : null,
+        bodyFatMethod: (hasPollock ? 'pollock' : hasNavy ? 'navy' : null) as SummaryPoint['bodyFatMethod'],
+        leanMass: r.leanMass ? parseFloat(r.leanMass) : null,
+        fatMass: r.fatMass ? parseFloat(r.fatMass) : null,
+      };
+    });
   }
 
   async findById(id: string): Promise<Measurement | null> {

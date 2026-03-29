@@ -2,17 +2,19 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { EvolutionRepository } from './evolution.repository';
 import type { Measurement } from '@/measurements/types/measurements.types';
 import type {
+  GetSummaryInput,
   SummaryPoint,
   CompareResult,
   LatestResult,
+  TrendCode,
 } from './types/evolution.types';
 
 @Injectable()
 export class EvolutionService {
   constructor(private readonly evolutionRepository: EvolutionRepository) {}
 
-  async getSummary(userId: string, limit = 30): Promise<SummaryPoint[]> {
-    return this.evolutionRepository.getSummary(userId, limit);
+  async getSummary(userId: string, input: GetSummaryInput): Promise<SummaryPoint[]> {
+    return this.evolutionRepository.getSummary(userId, input);
   }
 
   async compare(
@@ -20,64 +22,45 @@ export class EvolutionService {
     fromId: string,
     toId: string,
   ): Promise<CompareResult> {
-    const fromMeasurement = await this.evolutionRepository.findById(fromId);
-    const toMeasurement = await this.evolutionRepository.findById(toId);
+    const a = await this.evolutionRepository.findById(fromId);
+    const b = await this.evolutionRepository.findById(toId);
 
-    if (!fromMeasurement || fromMeasurement.userId !== userId) {
+    if (!a || a.userId !== userId) {
       throw new NotFoundException('From measurement not found');
     }
 
-    if (!toMeasurement || toMeasurement.userId !== userId) {
+    if (!b || b.userId !== userId) {
       throw new NotFoundException('To measurement not found');
     }
 
-    const fromDate = new Date(fromMeasurement.measurementDate);
-    const toDate = new Date(toMeasurement.measurementDate);
+    const [earlier, later] =
+      new Date(a.measurementDate) <= new Date(b.measurementDate) ? [a, b] : [b, a];
+
     const days = Math.round(
-      (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24),
+      (new Date(later.measurementDate).getTime() - new Date(earlier.measurementDate).getTime()) /
+        (1000 * 60 * 60 * 24),
     );
 
-    const fromWeight = parseFloat(fromMeasurement.weight);
-    const toWeight = parseFloat(toMeasurement.weight);
-
-    const fromBf = fromMeasurement.bodyFatPercentage
-      ? parseFloat(fromMeasurement.bodyFatPercentage)
-      : null;
-    const toBf = toMeasurement.bodyFatPercentage
-      ? parseFloat(toMeasurement.bodyFatPercentage)
-      : null;
-
-    const fromLean = fromMeasurement.leanMass
-      ? parseFloat(fromMeasurement.leanMass)
-      : null;
-    const toLean = toMeasurement.leanMass
-      ? parseFloat(toMeasurement.leanMass)
-      : null;
-
-    const fromFat = fromMeasurement.fatMass
-      ? parseFloat(fromMeasurement.fatMass)
-      : null;
-    const toFat = toMeasurement.fatMass
-      ? parseFloat(toMeasurement.fatMass)
-      : null;
+    const earlierBf = this.resolveBodyFat(earlier);
+    const laterBf = this.resolveBodyFat(later);
 
     return {
-      from: fromMeasurement,
-      to: toMeasurement,
+      from: earlier,
+      to: later,
       diff: {
         days,
-        weight: Math.round((toWeight - fromWeight) * 100) / 100,
+        weight: Math.round((parseFloat(later.weight) - parseFloat(earlier.weight)) * 100) / 100,
         bodyFatPercentage:
-          fromBf !== null && toBf !== null
-            ? Math.round((toBf - fromBf) * 100) / 100
+          earlierBf !== null && laterBf !== null
+            ? Math.round((laterBf - earlierBf) * 100) / 100
             : null,
         leanMass:
-          fromLean !== null && toLean !== null
-            ? Math.round((toLean - fromLean) * 100) / 100
+          earlier.leanMass !== null && later.leanMass !== null
+            ? Math.round((parseFloat(later.leanMass) - parseFloat(earlier.leanMass)) * 100) / 100
             : null,
         fatMass:
-          fromFat !== null && toFat !== null
-            ? Math.round((toFat - fromFat) * 100) / 100
+          earlier.fatMass !== null && later.fatMass !== null
+            ? Math.round((parseFloat(later.fatMass) - parseFloat(earlier.fatMass)) * 100) / 100
             : null,
       },
     };
@@ -93,79 +76,41 @@ export class EvolutionService {
     const current = result[0];
     const previous = result.length > 1 ? result[1] : null;
 
-    const { trend, message } = this.calculateTrend(current, previous);
+    const { trend, trendCode } = this.calculateTrend(current, previous);
 
-    return {
-      current,
-      previous,
-      trend,
-      message,
-    };
+    return { current, previous, trend, trendCode };
+  }
+
+  private resolveBodyFat(m: Measurement): number | null {
+    if (m.bodyFatPercentage != null) return parseFloat(m.bodyFatPercentage);
+    if (m.navyBodyFatPercentage != null) return parseFloat(m.navyBodyFatPercentage);
+    return null;
   }
 
   private calculateTrend(
     current: Measurement,
     previous: Measurement | null,
-  ): { trend: LatestResult['trend']; message: string } {
+  ): { trend: LatestResult['trend']; trendCode: TrendCode } {
     if (!previous) {
-      return {
-        trend: 'unknown',
-        message: 'First measurement recorded. Keep tracking your progress!',
-      };
+      return { trend: null, trendCode: 'first_measurement' };
     }
 
-    const currentBf = current.bodyFatPercentage
-      ? parseFloat(current.bodyFatPercentage)
-      : current.navyBodyFatPercentage
-        ? parseFloat(current.navyBodyFatPercentage)
-        : null;
+    const currentBf = this.resolveBodyFat(current);
+    const previousBf = this.resolveBodyFat(previous);
 
-    const previousBf = previous.bodyFatPercentage
-      ? parseFloat(previous.bodyFatPercentage)
-      : previous.navyBodyFatPercentage
-        ? parseFloat(previous.navyBodyFatPercentage)
-        : null;
+    if (currentBf !== null && previousBf !== null) {
+      const bfDiff = currentBf - previousBf;
 
-    if (currentBf === null || previousBf === null) {
-      const weightDiff =
-        parseFloat(current.weight) - parseFloat(previous.weight);
-
-      if (weightDiff <= -1) {
-        return {
-          trend: 'improving',
-          message: 'Good job! You are losing weight.',
-        };
-      } else if (weightDiff >= 1) {
-        return {
-          trend: 'worsening',
-          message: 'Weight increased. Review your routine.',
-        };
-      } else {
-        return { trend: 'stable', message: 'Weight is stable. Keep going!' };
-      }
+      if (bfDiff <= -2) return { trend: 'improving', trendCode: 'excellent_progress' };
+      if (bfDiff <= -1) return { trend: 'improving', trendCode: 'good_progress' };
+      if (bfDiff >= 1) return { trend: 'worsening', trendCode: 'fat_increased' };
+      return { trend: 'stable', trendCode: 'stable_results' };
     }
 
-    const bfDiff = currentBf - previousBf;
+    const weightDiff = parseFloat(current.weight) - parseFloat(previous.weight);
 
-    if (bfDiff <= -1) {
-      if (bfDiff <= -2) {
-        return {
-          trend: 'improving',
-          message: 'Excellent progress! You are on the right track!',
-        };
-      }
-      return { trend: 'improving', message: 'Good job! Keep it up!' };
-    } else if (bfDiff >= 1) {
-      return {
-        trend: 'worsening',
-        message: 'Body fat increased. Consider adjusting your routine.',
-      };
-    } else {
-      return {
-        trend: 'stable',
-        message:
-          'You are maintaining your results. Consider adjusting to improve.',
-      };
-    }
+    if (weightDiff <= -1) return { trend: 'improving', trendCode: 'weight_loss' };
+    if (weightDiff >= 1) return { trend: 'worsening', trendCode: 'weight_gain' };
+    return { trend: 'stable', trendCode: 'weight_stable' };
   }
 }
