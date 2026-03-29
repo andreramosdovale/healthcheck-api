@@ -10,11 +10,14 @@ import {
   Min,
   Max,
   IsDateString,
+  Validate,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { AgeRangeConstraint } from '@/common/validators/age-range.validator';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'user@example.com' })
+  @MaxLength(256)
   @IsEmail({}, { message: 'Invalid email' })
   email: string;
 
@@ -44,6 +47,7 @@ export class CreateUserDto {
 
   @ApiProperty({ example: '1990-01-15' })
   @IsDateString({}, { message: 'Invalid birth date' })
+  @Validate(AgeRangeConstraint, [10, 120])
   birthDate: string;
 
   @ApiProperty({ enum: ['male', 'female'] })

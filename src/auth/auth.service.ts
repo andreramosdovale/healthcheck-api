@@ -64,7 +64,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const user = await this.usersService.findById(storedToken.userId);
+    const user = await this.usersService.findByIdOrNull(storedToken.userId);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found or inactive');

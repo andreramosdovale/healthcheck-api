@@ -36,3 +36,9 @@ export interface UpdateUserData {
   height?: string;
   updatedAt: Date;
 }
+
+export interface ListUsersInput {
+  limit?: number;
+  offset?: number;
+  search?: string;
+}

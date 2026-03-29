@@ -11,6 +11,7 @@ import type {
   SanitizedUser,
   CreateUserInput,
   UpdateUserInput,
+  ListUsersInput,
 } from './types/users.types';
 
 @Injectable()
@@ -48,11 +49,13 @@ export class UsersService {
       termsAcceptedAt: new Date(),
     });
 
+    await this.usersRepository.assignDefaultRole(user.id);
+
     return this.sanitizeUser(user);
   }
 
-  async findAll(): Promise<SanitizedUser[]> {
-    const result = await this.usersRepository.findAll();
+  async findAll(input: ListUsersInput): Promise<SanitizedUser[]> {
+    const result = await this.usersRepository.findAll(input);
     return result.map((user) => this.sanitizeUser(user));
   }
 
@@ -64,6 +67,11 @@ export class UsersService {
     }
 
     return this.sanitizeUser(user);
+  }
+
+  async findByIdOrNull(id: string): Promise<SanitizedUser | null> {
+    const user = await this.usersRepository.findById(id);
+    return user ? this.sanitizeUser(user) : null;
   }
 
   async findByEmail(email: string): Promise<User | null> {
