@@ -4,6 +4,8 @@ import { AuthService } from './auth.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import type { LoginInput } from './types/auth.types';
+import type { CreateUserInput } from '@/users/types/users.types';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -14,8 +16,20 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   @ApiResponse({ status: 400, description: 'Validation error' })
-  register(@Body() createUserDto: CreateUserDto) {
-    return this.authService.register(createUserDto);
+  @ApiResponse({ status: 409, description: 'Email or nickname already in use' })
+  register(@Body() dto: CreateUserDto) {
+    const input: CreateUserInput = {
+      email: dto.email,
+      nickname: dto.nickname,
+      password: dto.password,
+      name: dto.name,
+      birthDate: dto.birthDate,
+      sex: dto.sex,
+      height: dto.height,
+      termsAccepted: dto.termsAccepted,
+    };
+
+    return this.authService.register(input);
   }
 
   @Post('login')
@@ -25,9 +39,16 @@ export class AuthController {
     status: 200,
     description: 'Returns access and refresh tokens',
   })
+  @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  @ApiResponse({ status: 403, description: 'Account inactive' })
+  login(@Body() dto: LoginDto) {
+    const input: LoginInput = {
+      login: dto.login,
+      password: dto.password,
+    };
+
+    return this.authService.login(input);
   }
 
   @Post('refresh')
@@ -38,15 +59,16 @@ export class AuthController {
     description: 'Returns new access and refresh tokens',
   })
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
-  refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refresh(refreshTokenDto.refreshToken);
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
   }
 
   @Post('logout')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Logout and invalidate refresh token' })
-  @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  logout(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.logout(refreshTokenDto.refreshToken);
+  @ApiResponse({ status: 204, description: 'Logged out successfully' })
+  @ApiResponse({ status: 401, description: 'Token not found or invalid' })
+  logout(@Body() dto: RefreshTokenDto) {
+    return this.authService.logout(dto.refreshToken);
   }
 }

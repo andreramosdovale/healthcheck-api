@@ -1,14 +1,19 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthRepository } from './auth.repository';
 import { UsersService } from '../users/users.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
-import { LoginDto } from './dto/login.dto';
-import type { SanitizedUser } from '@/users/types/users.types';
-import type { JwtPayload } from './strategies/jwt.strategy';
+import type { CreateUserInput, SanitizedUser } from '@/users/types/users.types';
+import type { JwtPayload, LoginInput } from './types/auth.types';
+
+type TokenPair = { accessToken: string; refreshToken: string };
+type AuthResponse = { user: SanitizedUser } & TokenPair;
 
 @Injectable()
 export class AuthService {
@@ -19,29 +24,26 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async register(createUserDto: CreateUserDto) {
-    const user = await this.usersService.create(createUserDto);
+  async register(input: CreateUserInput): Promise<AuthResponse> {
+    const user = await this.usersService.create(input);
     const tokens = await this.generateTokens(user);
 
-    return {
-      user,
-      ...tokens,
-    };
+    return { user, ...tokens };
   }
 
-  async login(loginDto: LoginDto) {
-    const user = await this.usersService.findByEmailOrNickname(loginDto.login);
+  async login(input: LoginInput): Promise<AuthResponse> {
+    const user = await this.usersService.findByEmailOrNickname(input.login);
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.isActive) {
-      throw new UnauthorizedException('User is inactive');
+      throw new ForbiddenException('Account is inactive');
     }
 
     const isPasswordValid = await bcrypt.compare(
-      loginDto.password,
+      input.password,
       user.passwordHash,
     );
 
@@ -49,16 +51,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const tokens = await this.generateTokens(user);
-    const { ...userWithoutPassword } = user;
+    const { passwordHash: _, ...sanitizedUser } = user;
+    const tokens = await this.generateTokens(sanitizedUser);
 
-    return {
-      user: userWithoutPassword,
-      ...tokens,
-    };
+    return { user: sanitizedUser, ...tokens };
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string): Promise<TokenPair> {
     const storedToken = await this.authRepository.findValidToken(refreshToken);
 
     if (!storedToken) {
@@ -73,21 +72,20 @@ export class AuthService {
 
     await this.authRepository.revokeById(storedToken.id);
 
-    const tokens = await this.generateTokens(user);
-
-    return {
-      user,
-      ...tokens,
-    };
+    return this.generateTokens(user);
   }
 
-  async logout(refreshToken: string) {
-    await this.authRepository.revokeByToken(refreshToken);
+  async logout(refreshToken: string): Promise<void> {
+    const token = await this.authRepository.findByToken(refreshToken);
 
-    return { message: 'Logged out successfully' };
+    if (!token) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    await this.authRepository.revokeById(token.id);
   }
 
-  private async generateTokens(user: SanitizedUser) {
+  private async generateTokens(user: SanitizedUser): Promise<TokenPair> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -97,10 +95,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = await this.createRefreshToken(user.id);
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
 
   private async createRefreshToken(userId: string): Promise<string> {

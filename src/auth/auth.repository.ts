@@ -31,6 +31,15 @@ export class AuthRepository {
       .where(eq(refreshTokens.id, id));
   }
 
+  async findByToken(token: string): Promise<RefreshToken | null> {
+    const [storedToken] = await this.db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.token, token));
+
+    return storedToken ?? null;
+  }
+
   async revokeByToken(token: string): Promise<void> {
     await this.db
       .update(refreshTokens)
