@@ -158,12 +158,12 @@ interface JwtPayload {
   sub: string;      // user id
   email: string;
   nickname: string;
-  roles: string[];  // e.g. ['user'], ['admin', 'user']
 }
 ```
 
-Roles are embedded in the JWT payload so that `PermissionsGuard` can validate permissions
-on every request without an additional database query.
+Roles are **not** embedded in the JWT. `PermissionsGuard` resolves permissions via a database
+query on each request, joining `user_roles → role_permissions → permissions`. This ensures
+permission changes take effect immediately without requiring token rotation.
 
 ---
 
