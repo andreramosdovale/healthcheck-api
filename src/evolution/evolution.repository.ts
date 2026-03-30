@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, desc, asc, and, gte, lte } from 'drizzle-orm';
+import { eq, desc, asc, and, gte, lte, lt } from 'drizzle-orm';
 import { DRIZZLE } from '@/database/drizzle.module';
 import type { DrizzleDB } from '@/database/db';
 import { measurements } from '@/database/schema';
@@ -70,5 +70,16 @@ export class EvolutionRepository {
       .where(eq(measurements.userId, userId))
       .orderBy(desc(measurements.measurementDate))
       .limit(2);
+  }
+
+  async findPreviousMeasurement(userId: string, beforeDate: string): Promise<Measurement | null> {
+    const [result] = await this.db
+      .select()
+      .from(measurements)
+      .where(and(eq(measurements.userId, userId), lt(measurements.measurementDate, beforeDate)))
+      .orderBy(desc(measurements.measurementDate))
+      .limit(1);
+
+    return result ?? null;
   }
 }

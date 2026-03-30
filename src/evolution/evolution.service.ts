@@ -7,6 +7,9 @@ import type {
   CompareResult,
   LatestResult,
   TrendCode,
+  DeltaDirection,
+  DeltaFields,
+  DeltaResult,
 } from './types/evolution.types';
 
 @Injectable()
@@ -79,6 +82,87 @@ export class EvolutionService {
     const { trend, trendCode } = this.calculateTrend(current, previous);
 
     return { current, previous, trend, trendCode };
+  }
+
+  async getDelta(userId: string, measurementId: string): Promise<DeltaResult> {
+    const current = await this.evolutionRepository.findById(measurementId);
+
+    if (!current || current.userId !== userId) {
+      throw new NotFoundException('Measurement not found');
+    }
+
+    const previous = await this.evolutionRepository.findPreviousMeasurement(
+      userId,
+      current.measurementDate,
+    );
+
+    if (!previous) {
+      return { measurementId: current.id, previousMeasurementId: null, delta: null };
+    }
+
+    return {
+      measurementId: current.id,
+      previousMeasurementId: previous.id,
+      delta: this.computeDelta(current, previous),
+    };
+  }
+
+  private computeDelta(current: Measurement, previous: Measurement): DeltaFields {
+    return {
+      weight: this.direction(current.weight, previous.weight, 0.2),
+      bodyFatPercentage: this.directionFromNumbers(
+        this.resolveBodyFat(current),
+        this.resolveBodyFat(previous),
+        0.2,
+      ),
+      leanMass: this.direction(current.leanMass, previous.leanMass, 0.2),
+      fatMass: this.direction(current.fatMass, previous.fatMass, 0.2),
+      triceps: this.direction(current.triceps, previous.triceps, 1.0),
+      subscapular: this.direction(current.subscapular, previous.subscapular, 1.0),
+      chest: this.direction(current.chest, previous.chest, 1.0),
+      midaxillary: this.direction(current.midaxillary, previous.midaxillary, 1.0),
+      suprailiac: this.direction(current.suprailiac, previous.suprailiac, 1.0),
+      abdominal: this.direction(current.abdominal, previous.abdominal, 1.0),
+      thigh: this.direction(current.thigh, previous.thigh, 1.0),
+      skinfoldSum: this.directionFromNumbers(
+        this.computeSkinfoldSum(current),
+        this.computeSkinfoldSum(previous),
+        2.0,
+      ),
+      neck: this.direction(current.neck, previous.neck, 0.5),
+      waist: this.direction(current.waist, previous.waist, 0.5),
+      hip: this.direction(current.hip, previous.hip, 0.5),
+      shoulders: this.direction(current.shoulders, previous.shoulders, 0.5),
+      chestCirc: this.direction(current.chestCirc, previous.chestCirc, 0.5),
+      leftBicepFlexed: this.direction(current.leftBicepFlexed, previous.leftBicepFlexed, 0.5),
+      rightBicepFlexed: this.direction(current.rightBicepFlexed, previous.rightBicepFlexed, 0.5),
+    };
+  }
+
+  private direction(
+    current: string | null | undefined,
+    previous: string | null | undefined,
+    threshold: number,
+  ): DeltaDirection {
+    if (current == null || previous == null) return null;
+    return this.directionFromNumbers(parseFloat(current), parseFloat(previous), threshold);
+  }
+
+  private directionFromNumbers(
+    current: number | null,
+    previous: number | null,
+    threshold: number,
+  ): DeltaDirection {
+    if (current === null || previous === null) return null;
+    const diff = current - previous;
+    if (Math.abs(diff) < threshold) return 'stable';
+    return diff > 0 ? 'up' : 'down';
+  }
+
+  private computeSkinfoldSum(m: Measurement): number | null {
+    const fields = [m.triceps, m.subscapular, m.chest, m.midaxillary, m.suprailiac, m.abdominal, m.thigh];
+    if (fields.some((f) => f == null)) return null;
+    return fields.reduce((sum, f) => sum + parseFloat(f!), 0);
   }
 
   private resolveBodyFat(m: Measurement): number | null {

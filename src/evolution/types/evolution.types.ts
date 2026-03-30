@@ -10,6 +10,8 @@ export type TrendCode =
   | 'weight_gain'
   | 'weight_stable';
 
+export type DeltaDirection = 'up' | 'down' | 'stable' | null;
+
 export interface GetSummaryInput {
   limit: number;
   from?: string;
@@ -42,4 +44,34 @@ export interface LatestResult {
   previous: Measurement | null;
   trend: 'improving' | 'stable' | 'worsening' | null;
   trendCode: TrendCode | null;
+}
+
+export interface DeltaFields {
+  weight: DeltaDirection;
+  bodyFatPercentage: DeltaDirection;
+  leanMass: DeltaDirection;
+  fatMass: DeltaDirection;
+  // skinfolds — individual fields + aggregate sum
+  triceps: DeltaDirection;
+  subscapular: DeltaDirection;
+  chest: DeltaDirection;
+  midaxillary: DeltaDirection;
+  suprailiac: DeltaDirection;
+  abdominal: DeltaDirection;
+  thigh: DeltaDirection;
+  skinfoldSum: DeltaDirection;
+  // circumferences
+  neck: DeltaDirection;
+  waist: DeltaDirection;
+  hip: DeltaDirection;
+  shoulders: DeltaDirection;
+  chestCirc: DeltaDirection;
+  leftBicepFlexed: DeltaDirection;
+  rightBicepFlexed: DeltaDirection;
+}
+
+export interface DeltaResult {
+  measurementId: string;
+  previousMeasurementId: string | null;
+  delta: DeltaFields | null;
 }

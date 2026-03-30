@@ -128,7 +128,7 @@ All values in centimeters (cm), range 10–200:
 | leftBicepRelaxed / rightBicepRelaxed | Arm relaxed      | No                |
 | leftBicepFlexed / rightBicepFlexed   | Arm flexed       | No                |
 
-> Bilateral fields (`leftThigh`, `rightThigh`, etc.) are stored for reference only and are not used in any calculation.
+> Most bilateral fields (`leftThigh`, `rightThigh`, `leftCalf`, `rightCalf`, `leftBicepRelaxed`, `rightBicepRelaxed`) are stored for reference only and are not used in calculations. Exception: `leftBicepFlexed` and `rightBicepFlexed` are included in the evolution delta (`GET /evolution/delta/:measurementId`) as indicators of muscle development.
 
 ---
 
@@ -263,6 +263,19 @@ export interface Measurement {
 | weight          | 20–500 kg             |
 | skinfolds       | 1–100 mm each         |
 | circumferences  | 10–200 cm each        |
+
+---
+
+## Field-level Delta
+
+Per-field direction indicators (for detail screen visual feedback) are provided by the
+Evolution module, not this module:
+
+```
+GET /evolution/delta/:measurementId
+```
+
+See `EVOLUTION_MODULE.md` for the full contract.
 
 ---
 

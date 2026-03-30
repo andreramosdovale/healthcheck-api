@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Param,
   Query,
   UseGuards,
   Request,
@@ -78,5 +79,17 @@ export class EvolutionController {
   @ApiResponse({ status: 200, description: 'Returns the latest measurement' })
   getLatest(@Request() req: { user: { id: string } }) {
     return this.evolutionService.getLatest(req.user.id);
+  }
+
+  @Get('delta/:measurementId')
+  @Permissions('measurements:read')
+  @ApiOperation({ summary: 'Get per-field direction indicators vs the previous measurement' })
+  @ApiResponse({ status: 200, description: 'Returns delta directions per field' })
+  @ApiResponse({ status: 404, description: 'Measurement not found' })
+  getDelta(
+    @Request() req: { user: { id: string } },
+    @Param('measurementId', ParseUUIDPipe) measurementId: string,
+  ) {
+    return this.evolutionService.getDelta(req.user.id, measurementId);
   }
 }

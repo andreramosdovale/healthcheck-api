@@ -15,11 +15,12 @@ This module provides progress tracking and comparison features.
 
 ## Endpoints
 
-| Method | Route                | Permission          | Description                        |
-| ------ | -------------------- | ------------------- | ---------------------------------- |
-| GET    | `/evolution/summary` | `measurements:read` | Get measurement history for charts |
-| GET    | `/evolution/compare` | `measurements:read` | Compare two measurements           |
-| GET    | `/evolution/latest`  | `measurements:read` | Get latest measurement + trend     |
+| Method | Route                              | Permission          | Description                             |
+| ------ | ---------------------------------- | ------------------- | --------------------------------------- |
+| GET    | `/evolution/summary`               | `measurements:read` | Get measurement history for charts      |
+| GET    | `/evolution/compare`               | `measurements:read` | Compare two measurements                |
+| GET    | `/evolution/latest`                | `measurements:read` | Get latest measurement + trend          |
+| GET    | `/evolution/delta/:measurementId`  | `measurements:read` | Get per-field direction vs previous     |
 
 ---
 
@@ -145,6 +146,81 @@ type TrendCode =
 
 ---
 
+### Delta
+
+Returns the direction of change for each metric in a given measurement compared to the
+immediately preceding measurement (by `measurementDate`) of the same user.
+
+Use case: visual indicators on the measurement detail screen (arrows, colors) without
+a second API call for numeric values.
+
+**Route parameter:**
+- `:measurementId` — UUID of the measurement to analyse
+
+**Response:**
+
+```typescript
+interface DeltaResult {
+  measurementId: string;
+  previousMeasurementId: string | null; // null = first measurement, no previous exists
+  delta: {
+    // body composition
+    weight: DeltaDirection;
+    bodyFatPercentage: DeltaDirection;   // resolved: Pollock > Navy
+    leanMass: DeltaDirection;
+    fatMass: DeltaDirection;
+    // skinfolds — individual site + aggregate sum
+    triceps: DeltaDirection;
+    subscapular: DeltaDirection;
+    chest: DeltaDirection;
+    midaxillary: DeltaDirection;
+    suprailiac: DeltaDirection;
+    abdominal: DeltaDirection;
+    thigh: DeltaDirection;
+    skinfoldSum: DeltaDirection;         // sum of all 7; null if either measurement has no skinfolds
+    // circumferences
+    neck: DeltaDirection;
+    waist: DeltaDirection;
+    hip: DeltaDirection;
+    shoulders: DeltaDirection;
+    chestCirc: DeltaDirection;
+    leftBicepFlexed: DeltaDirection;
+    rightBicepFlexed: DeltaDirection;
+  } | null; // null = no previous measurement exists (first measurement)
+}
+
+type DeltaDirection = 'up' | 'down' | 'stable' | null;
+// null = field absent in one of the two measurements — no comparison possible
+```
+
+**Rules:**
+- `delta: null` — no previous measurement exists (first measurement of the user)
+- `delta.field: null` — field was not recorded in one or both measurements
+- `'stable'` — absolute difference is below the field threshold (see table below)
+- `'up'` / `'down'` — direction of change: current minus previous
+- The API returns direction only — semantic interpretation (good/bad) is the frontend's responsibility
+- "Previous" is the most recent measurement with `measurementDate` strictly before the current one
+- Individual skinfold fields are `null` when either measurement has no skinfold data
+
+**Stability thresholds (fixed, server-side):**
+
+| Field                                      | Threshold  |
+| ------------------------------------------ | ---------- |
+| weight                                     | ± 0.2 kg   |
+| bodyFatPercentage                          | ± 0.2 %    |
+| leanMass / fatMass                         | ± 0.2 kg   |
+| triceps / subscapular / chest / midaxillary / suprailiac / abdominal / thigh | ± 1.0 mm |
+| skinfoldSum                                | ± 2.0 mm   |
+| neck / waist / hip / shoulders / chestCirc / leftBicepFlexed / rightBicepFlexed | ± 0.5 cm |
+
+**Errors:**
+
+| Status | Condition                                           |
+| ------ | --------------------------------------------------- |
+| 404    | Measurement not found or belongs to another user    |
+
+---
+
 ## Data Ownership
 
 - All endpoints filter by `req.user.id`
@@ -211,6 +287,36 @@ export interface LatestResult {
   previous: Measurement | null;
   trend: 'improving' | 'stable' | 'worsening' | null;
   trendCode: TrendCode | null;
+}
+
+export type DeltaDirection = 'up' | 'down' | 'stable' | null;
+
+export interface DeltaFields {
+  weight: DeltaDirection;
+  bodyFatPercentage: DeltaDirection;
+  leanMass: DeltaDirection;
+  fatMass: DeltaDirection;
+  triceps: DeltaDirection;
+  subscapular: DeltaDirection;
+  chest: DeltaDirection;
+  midaxillary: DeltaDirection;
+  suprailiac: DeltaDirection;
+  abdominal: DeltaDirection;
+  thigh: DeltaDirection;
+  skinfoldSum: DeltaDirection;
+  neck: DeltaDirection;
+  waist: DeltaDirection;
+  hip: DeltaDirection;
+  shoulders: DeltaDirection;
+  chestCirc: DeltaDirection;
+  leftBicepFlexed: DeltaDirection;
+  rightBicepFlexed: DeltaDirection;
+}
+
+export interface DeltaResult {
+  measurementId: string;
+  previousMeasurementId: string | null;
+  delta: DeltaFields | null;
 }
 ```
 
