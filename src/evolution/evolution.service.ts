@@ -16,7 +16,10 @@ import type {
 export class EvolutionService {
   constructor(private readonly evolutionRepository: EvolutionRepository) {}
 
-  async getSummary(userId: string, input: GetSummaryInput): Promise<SummaryPoint[]> {
+  async getSummary(
+    userId: string,
+    input: GetSummaryInput,
+  ): Promise<SummaryPoint[]> {
     return this.evolutionRepository.getSummary(userId, input);
   }
 
@@ -37,10 +40,13 @@ export class EvolutionService {
     }
 
     const [earlier, later] =
-      new Date(a.measurementDate) <= new Date(b.measurementDate) ? [a, b] : [b, a];
+      new Date(a.measurementDate) <= new Date(b.measurementDate)
+        ? [a, b]
+        : [b, a];
 
     const days = Math.round(
-      (new Date(later.measurementDate).getTime() - new Date(earlier.measurementDate).getTime()) /
+      (new Date(later.measurementDate).getTime() -
+        new Date(earlier.measurementDate).getTime()) /
         (1000 * 60 * 60 * 24),
     );
 
@@ -52,18 +58,26 @@ export class EvolutionService {
       to: later,
       diff: {
         days,
-        weight: Math.round((parseFloat(later.weight) - parseFloat(earlier.weight)) * 100) / 100,
+        weight:
+          Math.round(
+            (parseFloat(later.weight) - parseFloat(earlier.weight)) * 100,
+          ) / 100,
         bodyFatPercentage:
           earlierBf !== null && laterBf !== null
             ? Math.round((laterBf - earlierBf) * 100) / 100
             : null,
         leanMass:
           earlier.leanMass !== null && later.leanMass !== null
-            ? Math.round((parseFloat(later.leanMass) - parseFloat(earlier.leanMass)) * 100) / 100
+            ? Math.round(
+                (parseFloat(later.leanMass) - parseFloat(earlier.leanMass)) *
+                  100,
+              ) / 100
             : null,
         fatMass:
           earlier.fatMass !== null && later.fatMass !== null
-            ? Math.round((parseFloat(later.fatMass) - parseFloat(earlier.fatMass)) * 100) / 100
+            ? Math.round(
+                (parseFloat(later.fatMass) - parseFloat(earlier.fatMass)) * 100,
+              ) / 100
             : null,
       },
     };
@@ -97,7 +111,11 @@ export class EvolutionService {
     );
 
     if (!previous) {
-      return { measurementId: current.id, previousMeasurementId: null, delta: null };
+      return {
+        measurementId: current.id,
+        previousMeasurementId: null,
+        delta: null,
+      };
     }
 
     return {
@@ -107,7 +125,10 @@ export class EvolutionService {
     };
   }
 
-  private computeDelta(current: Measurement, previous: Measurement): DeltaFields {
+  private computeDelta(
+    current: Measurement,
+    previous: Measurement,
+  ): DeltaFields {
     return {
       weight: this.direction(current.weight, previous.weight, 0.2),
       bodyFatPercentage: this.directionFromNumbers(
@@ -118,9 +139,17 @@ export class EvolutionService {
       leanMass: this.direction(current.leanMass, previous.leanMass, 0.2),
       fatMass: this.direction(current.fatMass, previous.fatMass, 0.2),
       triceps: this.direction(current.triceps, previous.triceps, 1.0),
-      subscapular: this.direction(current.subscapular, previous.subscapular, 1.0),
+      subscapular: this.direction(
+        current.subscapular,
+        previous.subscapular,
+        1.0,
+      ),
       chest: this.direction(current.chest, previous.chest, 1.0),
-      midaxillary: this.direction(current.midaxillary, previous.midaxillary, 1.0),
+      midaxillary: this.direction(
+        current.midaxillary,
+        previous.midaxillary,
+        1.0,
+      ),
       suprailiac: this.direction(current.suprailiac, previous.suprailiac, 1.0),
       abdominal: this.direction(current.abdominal, previous.abdominal, 1.0),
       thigh: this.direction(current.thigh, previous.thigh, 1.0),
@@ -134,8 +163,30 @@ export class EvolutionService {
       hip: this.direction(current.hip, previous.hip, 0.5),
       shoulders: this.direction(current.shoulders, previous.shoulders, 0.5),
       chestCirc: this.direction(current.chestCirc, previous.chestCirc, 0.5),
-      leftBicepFlexed: this.direction(current.leftBicepFlexed, previous.leftBicepFlexed, 0.5),
-      rightBicepFlexed: this.direction(current.rightBicepFlexed, previous.rightBicepFlexed, 0.5),
+      leftThigh: this.direction(current.leftThigh, previous.leftThigh, 0.5),
+      rightThigh: this.direction(current.rightThigh, previous.rightThigh, 0.5),
+      leftCalf: this.direction(current.leftCalf, previous.leftCalf, 0.5),
+      rightCalf: this.direction(current.rightCalf, previous.rightCalf, 0.5),
+      leftBicepRelaxed: this.direction(
+        current.leftBicepRelaxed,
+        previous.leftBicepRelaxed,
+        0.5,
+      ),
+      rightBicepRelaxed: this.direction(
+        current.rightBicepRelaxed,
+        previous.rightBicepRelaxed,
+        0.5,
+      ),
+      leftBicepFlexed: this.direction(
+        current.leftBicepFlexed,
+        previous.leftBicepFlexed,
+        0.5,
+      ),
+      rightBicepFlexed: this.direction(
+        current.rightBicepFlexed,
+        previous.rightBicepFlexed,
+        0.5,
+      ),
     };
   }
 
@@ -145,7 +196,11 @@ export class EvolutionService {
     threshold: number,
   ): DeltaDirection {
     if (current == null || previous == null) return null;
-    return this.directionFromNumbers(parseFloat(current), parseFloat(previous), threshold);
+    return this.directionFromNumbers(
+      parseFloat(current),
+      parseFloat(previous),
+      threshold,
+    );
   }
 
   private directionFromNumbers(
@@ -160,14 +215,23 @@ export class EvolutionService {
   }
 
   private computeSkinfoldSum(m: Measurement): number | null {
-    const fields = [m.triceps, m.subscapular, m.chest, m.midaxillary, m.suprailiac, m.abdominal, m.thigh];
+    const fields = [
+      m.triceps,
+      m.subscapular,
+      m.chest,
+      m.midaxillary,
+      m.suprailiac,
+      m.abdominal,
+      m.thigh,
+    ];
     if (fields.some((f) => f == null)) return null;
     return fields.reduce((sum, f) => sum + parseFloat(f!), 0);
   }
 
   private resolveBodyFat(m: Measurement): number | null {
     if (m.bodyFatPercentage != null) return parseFloat(m.bodyFatPercentage);
-    if (m.navyBodyFatPercentage != null) return parseFloat(m.navyBodyFatPercentage);
+    if (m.navyBodyFatPercentage != null)
+      return parseFloat(m.navyBodyFatPercentage);
     return null;
   }
 
@@ -185,16 +249,21 @@ export class EvolutionService {
     if (currentBf !== null && previousBf !== null) {
       const bfDiff = currentBf - previousBf;
 
-      if (bfDiff <= -2) return { trend: 'improving', trendCode: 'excellent_progress' };
-      if (bfDiff <= -1) return { trend: 'improving', trendCode: 'good_progress' };
-      if (bfDiff >= 1) return { trend: 'worsening', trendCode: 'fat_increased' };
+      if (bfDiff <= -2)
+        return { trend: 'improving', trendCode: 'excellent_progress' };
+      if (bfDiff <= -1)
+        return { trend: 'improving', trendCode: 'good_progress' };
+      if (bfDiff >= 1)
+        return { trend: 'worsening', trendCode: 'fat_increased' };
       return { trend: 'stable', trendCode: 'stable_results' };
     }
 
     const weightDiff = parseFloat(current.weight) - parseFloat(previous.weight);
 
-    if (weightDiff <= -1) return { trend: 'improving', trendCode: 'weight_loss' };
-    if (weightDiff >= 1) return { trend: 'worsening', trendCode: 'weight_gain' };
+    if (weightDiff <= -1)
+      return { trend: 'improving', trendCode: 'weight_loss' };
+    if (weightDiff >= 1)
+      return { trend: 'worsening', trendCode: 'weight_gain' };
     return { trend: 'stable', trendCode: 'weight_stable' };
   }
 }

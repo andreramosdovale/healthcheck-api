@@ -66,6 +66,12 @@ export interface DeltaFields {
   hip: DeltaDirection;
   shoulders: DeltaDirection;
   chestCirc: DeltaDirection;
+  leftThigh: DeltaDirection;
+  rightThigh: DeltaDirection;
+  leftCalf: DeltaDirection;
+  rightCalf: DeltaDirection;
+  leftBicepRelaxed: DeltaDirection;
+  rightBicepRelaxed: DeltaDirection;
   leftBicepFlexed: DeltaDirection;
   rightBicepFlexed: DeltaDirection;
 }

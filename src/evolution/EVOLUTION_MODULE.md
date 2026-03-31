@@ -184,6 +184,12 @@ interface DeltaResult {
     hip: DeltaDirection;
     shoulders: DeltaDirection;
     chestCirc: DeltaDirection;
+    leftThigh: DeltaDirection;
+    rightThigh: DeltaDirection;
+    leftCalf: DeltaDirection;
+    rightCalf: DeltaDirection;
+    leftBicepRelaxed: DeltaDirection;
+    rightBicepRelaxed: DeltaDirection;
     leftBicepFlexed: DeltaDirection;
     rightBicepFlexed: DeltaDirection;
   } | null; // null = no previous measurement exists (first measurement)
@@ -211,7 +217,7 @@ type DeltaDirection = 'up' | 'down' | 'stable' | null;
 | leanMass / fatMass                         | ± 0.2 kg   |
 | triceps / subscapular / chest / midaxillary / suprailiac / abdominal / thigh | ± 1.0 mm |
 | skinfoldSum                                | ± 2.0 mm   |
-| neck / waist / hip / shoulders / chestCirc / leftBicepFlexed / rightBicepFlexed | ± 0.5 cm |
+| neck / waist / hip / shoulders / chestCirc / leftThigh / rightThigh / leftCalf / rightCalf / leftBicepRelaxed / rightBicepRelaxed / leftBicepFlexed / rightBicepFlexed | ± 0.5 cm |
 
 **Errors:**
 
@@ -309,6 +315,12 @@ export interface DeltaFields {
   hip: DeltaDirection;
   shoulders: DeltaDirection;
   chestCirc: DeltaDirection;
+  leftThigh: DeltaDirection;
+  rightThigh: DeltaDirection;
+  leftCalf: DeltaDirection;
+  rightCalf: DeltaDirection;
+  leftBicepRelaxed: DeltaDirection;
+  rightBicepRelaxed: DeltaDirection;
   leftBicepFlexed: DeltaDirection;
   rightBicepFlexed: DeltaDirection;
 }
