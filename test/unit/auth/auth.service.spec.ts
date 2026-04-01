@@ -1,33 +1,32 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '@/auth/auth.service';
 import { AuthRepository } from '@/auth/auth.repository';
 import { UsersService } from '@/users/users.service';
-import { CreateUserDto } from '@/users/dto/create-user.dto';
-import { LoginDto } from '@/auth/dto/login.dto';
-import { makeUser, makeSanitizedUser } from '@test/stubs/user.stub';
+import { makeUser, makeSanitizedUser, makeCreateUserInput } from '@test/stubs/user.stub';
+import { makeRefreshToken, makeLoginInput, REFRESH_TOKEN_VALUE } from '@test/stubs/auth.stub';
 
 jest.mock('bcrypt');
 jest.mock('crypto', () => ({
   randomBytes: jest.fn().mockReturnValue({
-    toString: jest.fn().mockReturnValue('mock-refresh-token'),
+    toString: jest.fn().mockReturnValue(REFRESH_TOKEN_VALUE),
   }),
 }));
 
 type MockAuthRepository = {
   findValidToken: jest.Mock;
+  findByToken: jest.Mock;
   revokeById: jest.Mock;
-  revokeByToken: jest.Mock;
   create: jest.Mock;
 };
 
 type MockUsersService = {
   create: jest.Mock;
   findByEmailOrNickname: jest.Mock;
-  findById: jest.Mock;
+  findByIdOrNull: jest.Mock;
 };
 
 type MockJwtService = {
@@ -42,44 +41,22 @@ describe('AuthService', () => {
 
   const mockUser = makeUser();
   const mockSanitizedUser = makeSanitizedUser();
-
-  const createUserDto: CreateUserDto = {
-    email: 'test@example.com',
-    nickname: 'testuser',
-    password: 'Test@1234',
-    name: 'Test User',
-    birthDate: '1990-01-01',
-    sex: 'male',
-    height: 175,
-    termsAccepted: true,
-  };
-
-  const loginDto: LoginDto = {
-    login: 'test@example.com',
-    password: 'Test@1234',
-  };
-
-  const mockRefreshToken = {
-    id: '1',
-    userId: mockUser.id,
-    token: 'mock-refresh-token',
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    revokedAt: null,
-    createdAt: new Date('2024-01-01'),
-  };
+  const mockCreateUserInput = makeCreateUserInput();
+  const mockLoginInput = makeLoginInput();
+  const mockRefreshToken = makeRefreshToken();
 
   beforeEach(async () => {
     authRepository = {
       findValidToken: jest.fn(),
+      findByToken: jest.fn(),
       revokeById: jest.fn(),
-      revokeByToken: jest.fn(),
       create: jest.fn(),
     };
 
     usersService = {
       create: jest.fn(),
       findByEmailOrNickname: jest.fn(),
-      findById: jest.fn(),
+      findByIdOrNull: jest.fn(),
     };
 
     jwtService = {
@@ -103,143 +80,127 @@ describe('AuthService', () => {
     service = module.get<AuthService>(AuthService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  afterEach(() => jest.clearAllMocks());
 
   describe('register', () => {
-    it('should register a new user and return tokens', async () => {
+    it('should create user, generate tokens and return them', async () => {
       usersService.create.mockResolvedValue(mockSanitizedUser);
       authRepository.create.mockResolvedValue(undefined);
 
-      const result = await service.register(createUserDto);
+      const result = await service.register(mockCreateUserInput);
 
-      expect(result).toHaveProperty('user');
+      expect(result).toHaveProperty('user', mockSanitizedUser);
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
-      expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
-      expect(usersService.create).toHaveBeenCalledWith(createUserDto);
-      expect(jwtService.sign).toHaveBeenCalled();
+      expect(result).toHaveProperty('refreshToken', REFRESH_TOKEN_VALUE);
+      expect(usersService.create).toHaveBeenCalledWith(mockCreateUserInput);
+      expect(jwtService.sign).toHaveBeenCalledWith({
+        sub: mockSanitizedUser.id,
+        email: mockSanitizedUser.email,
+        nickname: mockSanitizedUser.nickname,
+      });
     });
   });
 
   describe('login', () => {
-    it('should login successfully and return user with tokens', async () => {
+    it('should return sanitized user and tokens when credentials are valid', async () => {
       usersService.findByEmailOrNickname.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
       authRepository.create.mockResolvedValue(undefined);
 
-      const result = await service.login(loginDto);
+      const result = await service.login(mockLoginInput);
 
-      expect(result).toHaveProperty('user');
-      expect(result.user).not.toHaveProperty('hashedPassword');
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
-      expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
-      expect(usersService.findByEmailOrNickname).toHaveBeenCalledWith(
-        loginDto.login,
-      );
-      expect(bcrypt.compare).toHaveBeenCalledWith(
-        loginDto.password,
-        mockUser.passwordHash,
-      );
+      expect(result).toHaveProperty('refreshToken', REFRESH_TOKEN_VALUE);
+      expect(result.user).not.toHaveProperty('passwordHash');
+      expect(usersService.findByEmailOrNickname).toHaveBeenCalledWith(mockLoginInput.login);
+      expect(bcrypt.compare).toHaveBeenCalledWith(mockLoginInput.password, mockUser.passwordHash);
     });
 
-    it('should throw UnauthorizedException if user not found', async () => {
+    it('should throw UnauthorizedException when user is not found', async () => {
       usersService.findByEmailOrNickname.mockResolvedValue(null);
 
-      await expect(service.login(loginDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.login(loginDto)).rejects.toThrow(
-        'Invalid credentials',
-      );
+      await expect(service.login(mockLoginInput)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(mockLoginInput)).rejects.toThrow('Invalid credentials');
     });
 
-    it('should throw UnauthorizedException if user is inactive', async () => {
-      const inactiveUser = makeUser({ isActive: false });
-      usersService.findByEmailOrNickname.mockResolvedValue(inactiveUser);
+    it('should throw ForbiddenException when account is inactive', async () => {
+      usersService.findByEmailOrNickname.mockResolvedValue(makeUser({ isActive: false }));
 
-      await expect(service.login(loginDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.login(loginDto)).rejects.toThrow('User is inactive');
+      await expect(service.login(mockLoginInput)).rejects.toThrow(ForbiddenException);
+      await expect(service.login(mockLoginInput)).rejects.toThrow('Account is inactive');
     });
 
-    it('should throw UnauthorizedException if password is invalid', async () => {
+    it('should throw UnauthorizedException when password is wrong', async () => {
       usersService.findByEmailOrNickname.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(service.login(loginDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.login(loginDto)).rejects.toThrow(
-        'Invalid credentials',
-      );
+      await expect(service.login(mockLoginInput)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(mockLoginInput)).rejects.toThrow('Invalid credentials');
     });
   });
 
   describe('refresh', () => {
-    it('should refresh tokens successfully', async () => {
+    it('should revoke old token and return a new token pair', async () => {
       authRepository.findValidToken.mockResolvedValue(mockRefreshToken);
-      usersService.findById.mockResolvedValue(mockSanitizedUser);
+      usersService.findByIdOrNull.mockResolvedValue(mockSanitizedUser);
       authRepository.revokeById.mockResolvedValue(undefined);
       authRepository.create.mockResolvedValue(undefined);
 
-      const result = await service.refresh('mock-refresh-token');
+      const result = await service.refresh(REFRESH_TOKEN_VALUE);
 
-      expect(result).toHaveProperty('user');
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
-      expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
-      expect(usersService.findById).toHaveBeenCalledWith(
-        mockRefreshToken.userId,
-      );
-      expect(authRepository.revokeById).toHaveBeenCalledWith(
-        mockRefreshToken.id,
-      );
+      expect(result).toHaveProperty('refreshToken', REFRESH_TOKEN_VALUE);
+      expect(result).not.toHaveProperty('user');
+      expect(authRepository.revokeById).toHaveBeenCalledWith(mockRefreshToken.id);
+      expect(usersService.findByIdOrNull).toHaveBeenCalledWith(mockRefreshToken.userId);
     });
 
-    it('should throw UnauthorizedException if refresh token not found', async () => {
+    it('should throw UnauthorizedException when token is not found, expired or revoked', async () => {
       authRepository.findValidToken.mockResolvedValue(null);
 
-      await expect(service.refresh('invalid-token')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(service.refresh('invalid-token')).rejects.toThrow(UnauthorizedException);
       await expect(service.refresh('invalid-token')).rejects.toThrow(
         'Invalid or expired refresh token',
       );
     });
 
-    it('should throw UnauthorizedException if refresh token is revoked or expired', async () => {
-      authRepository.findValidToken.mockResolvedValue(null);
+    it('should throw UnauthorizedException when user is not found', async () => {
+      authRepository.findValidToken.mockResolvedValue(mockRefreshToken);
+      usersService.findByIdOrNull.mockResolvedValue(null);
 
-      await expect(service.refresh('revoked-token')).rejects.toThrow(
-        UnauthorizedException,
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(
+        'User not found or inactive',
       );
     });
 
-    it('should throw UnauthorizedException if user is inactive', async () => {
-      const inactiveUser = makeSanitizedUser({ isActive: false });
+    it('should throw UnauthorizedException when user is inactive', async () => {
       authRepository.findValidToken.mockResolvedValue(mockRefreshToken);
-      usersService.findById.mockResolvedValue(inactiveUser);
+      usersService.findByIdOrNull.mockResolvedValue(makeSanitizedUser({ isActive: false }));
 
-      await expect(service.refresh('mock-refresh-token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.refresh('mock-refresh-token')).rejects.toThrow(
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(
         'User not found or inactive',
       );
     });
   });
 
   describe('logout', () => {
-    it('should logout successfully', async () => {
-      authRepository.revokeByToken.mockResolvedValue(undefined);
+    it('should revoke the token when it exists', async () => {
+      authRepository.findByToken.mockResolvedValue(mockRefreshToken);
+      authRepository.revokeById.mockResolvedValue(undefined);
 
-      const result = await service.logout('mock-refresh-token');
+      await service.logout(REFRESH_TOKEN_VALUE);
 
-      expect(result).toEqual({ message: 'Logged out successfully' });
-      expect(authRepository.revokeByToken).toHaveBeenCalledWith(
-        'mock-refresh-token',
-      );
+      expect(authRepository.findByToken).toHaveBeenCalledWith(REFRESH_TOKEN_VALUE);
+      expect(authRepository.revokeById).toHaveBeenCalledWith(mockRefreshToken.id);
+    });
+
+    it('should throw UnauthorizedException when token does not exist', async () => {
+      authRepository.findByToken.mockResolvedValue(null);
+
+      await expect(service.logout('unknown-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.logout('unknown-token')).rejects.toThrow('Invalid token');
     });
   });
 
@@ -248,68 +209,41 @@ describe('AuthService', () => {
       calculateExpiration: (expiresIn: string) => Date;
     };
 
-    it('should calculate expiration for seconds', () => {
-      const result = (
-        service as unknown as AuthServicePrivate
-      ).calculateExpiration('60s');
-      const now = new Date();
-      const expected = new Date(now.getTime() + 60 * 1000);
+    const calc = (expiresIn: string) =>
+      (service as unknown as AuthServicePrivate).calculateExpiration(expiresIn);
 
-      expect(result.getTime()).toBeGreaterThanOrEqual(
-        expected.getTime() - 1000,
-      );
+    it('should calculate expiration in seconds', () => {
+      const result = calc('60s');
+      const expected = new Date(Date.now() + 60 * 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
-    it('should calculate expiration for minutes', () => {
-      const result = (
-        service as unknown as AuthServicePrivate
-      ).calculateExpiration('30m');
-      const now = new Date();
-      const expected = new Date(now.getTime() + 30 * 60 * 1000);
-
-      expect(result.getTime()).toBeGreaterThanOrEqual(
-        expected.getTime() - 1000,
-      );
+    it('should calculate expiration in minutes', () => {
+      const result = calc('30m');
+      const expected = new Date(Date.now() + 30 * 60 * 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
-    it('should calculate expiration for hours', () => {
-      const result = (
-        service as unknown as AuthServicePrivate
-      ).calculateExpiration('2h');
-      const now = new Date();
-      const expected = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-
-      expect(result.getTime()).toBeGreaterThanOrEqual(
-        expected.getTime() - 1000,
-      );
+    it('should calculate expiration in hours', () => {
+      const result = calc('2h');
+      const expected = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
-    it('should calculate expiration for days', () => {
-      const result = (
-        service as unknown as AuthServicePrivate
-      ).calculateExpiration('7d');
-      const now = new Date();
-      const expected = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-      expect(result.getTime()).toBeGreaterThanOrEqual(
-        expected.getTime() - 1000,
-      );
+    it('should calculate expiration in days', () => {
+      const result = calc('7d');
+      const expected = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
 
-    it('should default to 7 days for invalid format', () => {
-      const result = (
-        service as unknown as AuthServicePrivate
-      ).calculateExpiration('invalid');
-      const now = new Date();
-      const expected = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-      expect(result.getTime()).toBeGreaterThanOrEqual(
-        expected.getTime() - 1000,
-      );
+    it('should default to 7 days for unrecognized format', () => {
+      const result = calc('invalid');
+      const expected = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      expect(result.getTime()).toBeGreaterThanOrEqual(expected.getTime() - 1000);
       expect(result.getTime()).toBeLessThanOrEqual(expected.getTime() + 1000);
     });
   });

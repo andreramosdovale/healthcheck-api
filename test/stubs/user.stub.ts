@@ -5,8 +5,10 @@ import type {
   UpdateUserInput,
 } from '@/users/types/users.types';
 
+export const USER_ID = '123e4567-e89b-12d3-a456-426614174000';
+
 export const makeUser = (overrides?: Partial<User>): User => ({
-  id: '123e4567-e89b-12d3-a456-426614174000',
+  id: USER_ID,
   email: 'test@example.com',
   nickname: 'testuser',
   passwordHash: 'hashedPassword',
