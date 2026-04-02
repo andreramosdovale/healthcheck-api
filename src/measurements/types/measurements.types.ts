@@ -49,6 +49,11 @@ export interface ListMeasurementsInput {
   to?: string;
 }
 
+export interface WaistHipRatio {
+  value: number;
+  risk: 'low' | 'moderate' | 'high' | null;
+}
+
 // Response type (retornado pela API)
 export interface MeasurementResponse {
   id: string;
@@ -84,6 +89,8 @@ export interface MeasurementResponse {
     bodyFatMethod: 'pollock' | 'navy' | null;
     leanMass: number | null;
     fatMass: number | null;
+    leanMassPercentage: number | null;
+    waistHipRatio: WaistHipRatio | null;
   };
   createdAt: string;
   updatedAt: string | null;

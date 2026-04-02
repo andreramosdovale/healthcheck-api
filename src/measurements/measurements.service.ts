@@ -144,25 +144,31 @@ export class MeasurementsService {
       fatMass: fatMass?.toString(),
     });
 
-    return toMeasurementResponse(row);
+    return toMeasurementResponse(row, user.sex);
   }
 
   async findAllByUser(
     userId: string,
     filters: ListMeasurementsInput,
   ): Promise<MeasurementResponse[]> {
-    const rows = await this.measurementsRepository.findAllByUser(userId, filters);
-    return rows.map(toMeasurementResponse);
+    const [rows, user] = await Promise.all([
+      this.measurementsRepository.findAllByUser(userId, filters),
+      this.measurementsRepository.findUserById(userId),
+    ]);
+    return rows.map((row) => toMeasurementResponse(row, user?.sex));
   }
 
   async findOne(id: string, userId: string): Promise<MeasurementResponse> {
-    const measurement = await this.measurementsRepository.findById(id, userId);
+    const [measurement, user] = await Promise.all([
+      this.measurementsRepository.findById(id, userId),
+      this.measurementsRepository.findUserById(userId),
+    ]);
 
     if (!measurement) {
       throw new NotFoundException('Measurement not found');
     }
 
-    return toMeasurementResponse(measurement);
+    return toMeasurementResponse(measurement, user?.sex);
   }
 
   async update(
@@ -252,7 +258,7 @@ export class MeasurementsService {
     };
 
     const row = await this.measurementsRepository.update(id, userId, updateData);
-    return toMeasurementResponse(row);
+    return toMeasurementResponse(row, user.sex);
   }
 
   async remove(id: string, userId: string): Promise<void> {

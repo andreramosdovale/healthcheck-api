@@ -142,6 +142,36 @@ Calculated fields are returned inside the `calculated` object in the response. T
 | bodyFatMethod       | `'pollock'` or `'navy'`              | Indicates which method produced `bodyFatPercentage`     |
 | leanMass            | `weight × (1 − bodyFatPercentage%)` | When `bodyFatPercentage` is available (either method)   |
 | fatMass             | `weight × bodyFatPercentage%`        | When `bodyFatPercentage` is available (either method)   |
+| leanMassPercentage  | `100 − bodyFatPercentage`            | When `bodyFatPercentage` is available (either method)   |
+| waistHipRatio       | See below                            | When both `waist` and `hip` are present                 |
+
+### Lean Mass Percentage
+
+```
+leanMassPercentage = 100 − bodyFatPercentage
+```
+
+Returns `null` when `bodyFatPercentage` is `null`.
+
+### Waist-Hip Ratio (WHR)
+
+```
+value = waist / hip   (rounded to 2 decimal places)
+```
+
+Returns `null` when `waist` or `hip` is absent.
+
+**Risk classification** based on WHO (2008):
+
+| Sex      | `"low"`  | `"moderate"`  | `"high"`  |
+| -------- | -------- | ------------- | --------- |
+| `male`   | < 0.90   | 0.90 – 0.99   | ≥ 1.00    |
+| `female` | < 0.80   | 0.80 – 0.85   | > 0.85    |
+
+- `risk` is `null` when the user's `sex` is not available
+- The `risk` field uses semantic codes — UI copy is the frontend's responsibility
+
+**Reference:** WHO (2008). *Waist Circumference and Waist-Hip Ratio: Report of a WHO Expert Consultation*. Geneva, 8–11 December 2008. ISBN 978 92 4 150149 1.
 
 ---
 
@@ -212,11 +242,18 @@ interface CircumferenceData {
   rightBicepFlexed: number | null;
 }
 
+interface WaistHipRatio {
+  value: number;
+  risk: 'low' | 'moderate' | 'high' | null;
+}
+
 interface CalculatedData {
   bodyFatPercentage: number | null;
   bodyFatMethod: 'pollock' | 'navy' | null;
   leanMass: number | null;
   fatMass: number | null;
+  leanMassPercentage: number | null;
+  waistHipRatio: WaistHipRatio | null;
 }
 
 export interface Measurement {

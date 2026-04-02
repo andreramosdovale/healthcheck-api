@@ -1,4 +1,5 @@
 import type { Measurement, MeasurementResponse } from '../types/measurements.types';
+import { calculateWaistHipRatio } from './waist-hip-ratio';
 
 const SKINFOLD_FIELDS = [
   'triceps',
@@ -30,13 +31,28 @@ function parseOrNull(value: string | null): number | null {
   return value !== null ? parseFloat(value) : null;
 }
 
-export function toMeasurementResponse(row: Measurement): MeasurementResponse {
+export function toMeasurementResponse(
+  row: Measurement,
+  sex?: 'male' | 'female' | null,
+): MeasurementResponse {
   const pollock = parseOrNull(row.bodyFatPercentage);
   const navy = parseOrNull(row.navyBodyFatPercentage);
 
   const bodyFatPercentage = pollock ?? navy;
   const bodyFatMethod =
     pollock !== null ? 'pollock' : navy !== null ? 'navy' : null;
+
+  const leanMassPercentage =
+    bodyFatPercentage !== null
+      ? Math.round((100 - bodyFatPercentage) * 100) / 100
+      : null;
+
+  const waist = parseOrNull(row.waist);
+  const hip = parseOrNull(row.hip);
+  const waistHipRatio =
+    waist !== null && hip !== null
+      ? calculateWaistHipRatio(waist, hip, sex)
+      : null;
 
   const allSkinfoldNull = SKINFOLD_FIELDS.every((f) => row[f] === null);
   const skinfolds = allSkinfoldNull
@@ -58,8 +74,8 @@ export function toMeasurementResponse(row: Measurement): MeasurementResponse {
     ? null
     : {
         neck: parseOrNull(row.neck),
-        waist: parseOrNull(row.waist),
-        hip: parseOrNull(row.hip),
+        waist,
+        hip,
         shoulders: parseOrNull(row.shoulders),
         chestCirc: parseOrNull(row.chestCirc),
         leftThigh: parseOrNull(row.leftThigh),
@@ -84,6 +100,8 @@ export function toMeasurementResponse(row: Measurement): MeasurementResponse {
       bodyFatMethod,
       leanMass: parseOrNull(row.leanMass),
       fatMass: parseOrNull(row.fatMass),
+      leanMassPercentage,
+      waistHipRatio,
     },
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt?.toISOString() ?? null,
