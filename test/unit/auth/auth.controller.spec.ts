@@ -39,7 +39,11 @@ describe('AuthController', () => {
         height: 175,
         termsAccepted: true,
       };
-      const expected = { user: makeSanitizedUser(), accessToken: 'at', refreshToken: 'rt' };
+      const expected = {
+        user: makeSanitizedUser(),
+        accessToken: 'at',
+        refreshToken: 'rt',
+      };
       mockAuthService.register.mockResolvedValue(expected);
 
       const result = await controller.register(dto);
@@ -64,7 +68,11 @@ describe('AuthController', () => {
         login: 'test@example.com',
         password: 'Test@1234',
       };
-      const expected = { user: makeSanitizedUser(), accessToken: 'at', refreshToken: 'rt' };
+      const expected = {
+        user: makeSanitizedUser(),
+        accessToken: 'at',
+        refreshToken: 'rt',
+      };
       mockAuthService.login.mockResolvedValue(expected);
 
       const result = await controller.login(dto);
