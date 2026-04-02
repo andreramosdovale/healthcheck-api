@@ -3,6 +3,7 @@ import type {
   SanitizedUser,
   CreateUserInput,
   UpdateUserInput,
+  ListUsersInput,
 } from '@/users/types/users.types';
 
 export const USER_ID = '123e4567-e89b-12d3-a456-426614174000';
@@ -52,5 +53,13 @@ export const makeUpdateUserInput = (
 ): UpdateUserInput => ({
   name: 'Updated Name',
   height: 180,
+  ...overrides,
+});
+
+export const makeListUsersInput = (
+  overrides?: Partial<ListUsersInput>,
+): ListUsersInput => ({
+  limit: 20,
+  offset: 0,
   ...overrides,
 });

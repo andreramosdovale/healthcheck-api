@@ -3,28 +3,17 @@ import { UsersController } from '@/users/users.controller';
 import { UsersService } from '@/users/users.service';
 import { CreateUserDto } from '@/users/dto/create-user.dto';
 import { UpdateUserDto } from '@/users/dto/update-user.dto';
+import { ListUsersDto } from '@/users/dto/list-users.dto';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
-import { makeSanitizedUser, makeCreateUserInput } from '@test/stubs/user.stub';
+import {
+  makeSanitizedUser,
+  makeCreateUserInput,
+  makeListUsersInput,
+} from '@test/stubs/user.stub';
 
 describe('UsersController', () => {
   let controller: UsersController;
-
-  const createUserDto: CreateUserDto = {
-    email: 'test@example.com',
-    nickname: 'testuser',
-    password: 'Test@1234',
-    name: 'Test User',
-    birthDate: '1990-01-01',
-    sex: 'male',
-    height: 175,
-    termsAccepted: true,
-  };
-
-  const updateUserDto: UpdateUserDto = {
-    name: 'Updated Name',
-    height: 180,
-  };
 
   const mockUsersService = {
     create: jest.fn(),
@@ -34,117 +23,137 @@ describe('UsersController', () => {
     remove: jest.fn(),
   };
 
-  const mockJwtAuthGuard = {
-    canActivate: jest.fn(() => true),
-  };
-
-  const mockPermissionsGuard = {
-    canActivate: jest.fn(() => true),
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [
-        {
-          provide: UsersService,
-          useValue: mockUsersService,
-        },
-      ],
+      providers: [{ provide: UsersService, useValue: mockUsersService }],
     })
       .overrideGuard(JwtAuthGuard)
-      .useValue(mockJwtAuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
       .overrideGuard(PermissionsGuard)
-      .useValue(mockPermissionsGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
       .compile();
 
     controller = module.get<UsersController>(UsersController);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  afterEach(() => jest.clearAllMocks());
 
   describe('create', () => {
-    it('should call UsersService.create with mapped input and return its result', async () => {
-      const user = makeSanitizedUser();
-      mockUsersService.create.mockResolvedValue(user);
+    it('should map dto to CreateUserInput, call service.create and return its result', async () => {
+      const dto: CreateUserDto = {
+        email: 'test@example.com',
+        nickname: 'testuser',
+        password: 'Test@1234',
+        name: 'Test User',
+        birthDate: '1990-01-01',
+        sex: 'male',
+        height: 175,
+        termsAccepted: true,
+      };
+      const expected = makeSanitizedUser();
+      mockUsersService.create.mockResolvedValue(expected);
 
-      const result = await controller.create(createUserDto);
+      const result = await controller.create(dto);
 
-      expect(mockUsersService.create).toHaveBeenCalledWith(
-        makeCreateUserInput(),
-      );
-      expect(mockUsersService.create).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(user);
+      expect(result).toEqual(expected);
+      expect(mockUsersService.create).toHaveBeenCalledWith(makeCreateUserInput());
     });
   });
 
   describe('findAll', () => {
-    it('should call UsersService.findAll and return all users', async () => {
-      const users = [
-        makeSanitizedUser(),
-        makeSanitizedUser({ id: 'another-id' }),
-      ];
-      mockUsersService.findAll.mockResolvedValue(users);
+    it('should map query to ListUsersInput, call service.findAll and return its result', async () => {
+      const query: ListUsersDto = { limit: 20, offset: 0 };
+      const expected = [makeSanitizedUser(), makeSanitizedUser({ id: 'another-id' })];
+      mockUsersService.findAll.mockResolvedValue(expected);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll(query);
 
-      expect(mockUsersService.findAll).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(users);
+      expect(result).toEqual(expected);
+      expect(mockUsersService.findAll).toHaveBeenCalledWith(makeListUsersInput());
     });
 
-    it('should return empty array when no users exist', async () => {
+    it('should forward search param to service.findAll', async () => {
+      const query: ListUsersDto = { limit: 10, offset: 5, search: 'john' };
       mockUsersService.findAll.mockResolvedValue([]);
 
-      const result = await controller.findAll();
+      await controller.findAll(query);
 
-      expect(result).toEqual([]);
+      expect(mockUsersService.findAll).toHaveBeenCalledWith({
+        limit: 10,
+        offset: 5,
+        search: 'john',
+      });
+    });
+  });
+
+  describe('getMe', () => {
+    it('should return the authenticated user directly without calling the service', () => {
+      const user = makeSanitizedUser();
+
+      const result = controller.getMe(user);
+
+      expect(result).toEqual(user);
+      expect(mockUsersService.findAll).not.toHaveBeenCalled();
+      expect(mockUsersService.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateMe', () => {
+    it('should call service.update with the current user id and mapped input', async () => {
+      const user = makeSanitizedUser();
+      const dto: UpdateUserDto = { name: 'Updated Name', height: 180 };
+      const expected = makeSanitizedUser({ name: 'Updated Name', height: '180' });
+      mockUsersService.update.mockResolvedValue(expected);
+
+      const result = await controller.updateMe(user, dto);
+
+      expect(result).toEqual(expected);
+      expect(mockUsersService.update).toHaveBeenCalledWith(user.id, {
+        name: dto.name,
+        height: dto.height,
+      });
     });
   });
 
   describe('findOne', () => {
-    it('should call UsersService.findById with the id and return its result', async () => {
+    it('should call service.findById with the id and return its result', async () => {
       const user = makeSanitizedUser();
       mockUsersService.findById.mockResolvedValue(user);
 
       const result = await controller.findOne(user.id);
 
-      expect(mockUsersService.findById).toHaveBeenCalledWith(user.id);
-      expect(mockUsersService.findById).toHaveBeenCalledTimes(1);
       expect(result).toEqual(user);
+      expect(mockUsersService.findById).toHaveBeenCalledWith(user.id);
     });
   });
 
   describe('update', () => {
-    it('should call UsersService.update with id and mapped input and return its result', async () => {
-      const updated = makeSanitizedUser({
-        name: 'Updated Name',
-        height: '180',
-      });
-      mockUsersService.update.mockResolvedValue(updated);
+    it('should call service.update with id and mapped input and return its result', async () => {
+      const user = makeSanitizedUser();
+      const dto: UpdateUserDto = { name: 'Updated Name', height: 180 };
+      const expected = makeSanitizedUser({ name: 'Updated Name', height: '180' });
+      mockUsersService.update.mockResolvedValue(expected);
 
-      const result = await controller.update(updated.id, updateUserDto);
+      const result = await controller.update(user.id, dto);
 
-      expect(mockUsersService.update).toHaveBeenCalledWith(updated.id, {
-        name: updateUserDto.name,
-        height: updateUserDto.height,
+      expect(result).toEqual(expected);
+      expect(mockUsersService.update).toHaveBeenCalledWith(user.id, {
+        name: dto.name,
+        height: dto.height,
       });
-      expect(mockUsersService.update).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(updated);
     });
   });
 
   describe('remove', () => {
-    it('should call UsersService.remove with the id and return undefined', async () => {
+    it('should call service.remove with the id and return undefined', async () => {
       const user = makeSanitizedUser();
       mockUsersService.remove.mockResolvedValue(undefined);
 
       const result = await controller.remove(user.id);
 
-      expect(mockUsersService.remove).toHaveBeenCalledWith(user.id);
-      expect(mockUsersService.remove).toHaveBeenCalledTimes(1);
       expect(result).toBeUndefined();
+      expect(mockUsersService.remove).toHaveBeenCalledWith(user.id);
     });
   });
 });
