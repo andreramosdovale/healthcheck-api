@@ -2,34 +2,30 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { MeasurementsService } from '@/measurements/measurements.service';
 import { MeasurementsRepository } from '@/measurements/measurements.repository';
-import { CreateMeasurementDto } from '@/measurements/dto/create-measurement.dto';
-import { UpdateMeasurementDto } from '@/measurements/dto/update-measurement.dto';
 import {
   makeMeasurement,
+  makeMeasurementResponse,
   makeUserForMeasurement,
+  makeCreateMeasurementInput,
+  makeListMeasurementsInput,
+  USER_ID,
+  MEASUREMENT_ID,
 } from '@test/stubs/measurement.stub';
+
+type MockMeasurementsRepository = {
+  findUserById: jest.Mock;
+  findAllByUser: jest.Mock;
+  findById: jest.Mock;
+  insert: jest.Mock;
+  update: jest.Mock;
+  delete: jest.Mock;
+};
 
 describe('MeasurementsService', () => {
   let service: MeasurementsService;
+  let mockRepository: MockMeasurementsRepository;
 
-  const userId = '123e4567-e89b-12d3-a456-426614174000';
-  const measurementId = '223e4567-e89b-12d3-a456-426614174001';
-
-  const mockRepository = {
-    findUserById: jest.fn(),
-    findAllByUser: jest.fn(),
-    findById: jest.fn(),
-    insert: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  };
-
-  const baseCreateDto: CreateMeasurementDto = {
-    measurementDate: '2024-01-15',
-    weight: 80,
-  };
-
-  const allSkinfolds = {
+  const allSkinfoldInput = {
     triceps: 10,
     subscapular: 12,
     chest: 8,
@@ -40,6 +36,15 @@ describe('MeasurementsService', () => {
   };
 
   beforeEach(async () => {
+    mockRepository = {
+      findUserById: jest.fn(),
+      findAllByUser: jest.fn(),
+      findById: jest.fn(),
+      insert: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MeasurementsService,
@@ -50,261 +55,245 @@ describe('MeasurementsService', () => {
     service = module.get<MeasurementsService>(MeasurementsService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  afterEach(() => jest.clearAllMocks());
 
   describe('create', () => {
-    it('should create a measurement with weight only', async () => {
-      const measurement = makeMeasurement();
+    it('should insert a measurement with weight only and return a MeasurementResponse', async () => {
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
-      mockRepository.insert.mockResolvedValue(measurement);
+      mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      const result = await service.create(userId, baseCreateDto);
+      const result = await service.create(USER_ID, makeCreateMeasurementInput());
 
-      expect(result).toEqual(measurement);
-      expect(mockRepository.insert).toHaveBeenCalled();
+      expect(result).toEqual(makeMeasurementResponse());
+      expect(mockRepository.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: USER_ID, weight: '80' }),
+      );
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
       mockRepository.findUserById.mockResolvedValue(null);
 
-      await expect(service.create(userId, baseCreateDto)).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.create(userId, baseCreateDto)).rejects.toThrow(
-        'User not found',
-      );
+      await expect(
+        service.create(USER_ID, makeCreateMeasurementInput()),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.create(USER_ID, makeCreateMeasurementInput()),
+      ).rejects.toThrow('User not found');
+      expect(mockRepository.insert).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when only some skinfolds are provided', async () => {
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
-
-      const dtoWithPartialSkinfolds: CreateMeasurementDto = {
-        ...baseCreateDto,
+      const partialSkinfolds = makeCreateMeasurementInput({
         triceps: 10,
         subscapular: 12,
-      };
+      });
 
-      await expect(
-        service.create(userId, dtoWithPartialSkinfolds),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.create(userId, dtoWithPartialSkinfolds),
-      ).rejects.toThrow(
-        'All 7 skinfolds are required when providing skinfold measurements',
+      await expect(service.create(USER_ID, partialSkinfolds)).rejects.toThrow(
+        BadRequestException,
       );
+      await expect(service.create(USER_ID, partialSkinfolds)).rejects.toThrow(
+        'All 7 skinfold fields must be provided together or none at all.',
+      );
+      expect(mockRepository.insert).not.toHaveBeenCalled();
     });
 
-    it('should create a measurement with all skinfolds and calculate Pollock body fat for male', async () => {
-      const measurement = makeMeasurement({
-        ...Object.fromEntries(
-          Object.entries(allSkinfolds).map(([k, v]) => [k, v.toString()]),
-        ),
-        bodyFatPercentage: '14.25',
-        leanMass: '68.60',
-        fatMass: '11.40',
-      });
+    it('should pass bodyFatPercentage via Pollock for male with all skinfolds', async () => {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+      mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
-      mockRepository.insert.mockResolvedValue(measurement);
+      await service.create(USER_ID, makeCreateMeasurementInput(allSkinfoldInput));
 
-      const result = await service.create(userId, {
-        ...baseCreateDto,
-        ...allSkinfolds,
-      });
-
-      expect(result).toEqual(measurement);
-      expect(mockRepository.insert).toHaveBeenCalled();
+      expect(mockRepository.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bodyFatPercentage: expect.any(String),
+          leanMass: expect.any(String),
+          fatMass: expect.any(String),
+        }),
+      );
+      const insertArg = mockRepository.insert.mock.calls[0][0];
+      expect(parseFloat(insertArg.bodyFatPercentage)).toBeGreaterThan(0);
+      // null?.toString() yields undefined — the navy field is absent when Pollock runs
+      expect(insertArg.navyBodyFatPercentage).toBeUndefined();
     });
 
-    it('should create a measurement with all skinfolds and calculate Pollock body fat for female', async () => {
-      const measurement = makeMeasurement({
-        ...Object.fromEntries(
-          Object.entries(allSkinfolds).map(([k, v]) => [k, v.toString()]),
-        ),
-        bodyFatPercentage: '22.10',
-        leanMass: '62.32',
-        fatMass: '17.68',
-      });
+    it('should pass bodyFatPercentage via Pollock for female with all skinfolds', async () => {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+      mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      mockRepository.findUserById.mockResolvedValue(
-        makeUserForMeasurement({ sex: 'female' }),
-      );
-      mockRepository.insert.mockResolvedValue(measurement);
+      await service.create(USER_ID, makeCreateMeasurementInput(allSkinfoldInput));
 
-      const result = await service.create(userId, {
-        ...baseCreateDto,
-        ...allSkinfolds,
-      });
-
-      expect(result).toEqual(measurement);
-      expect(mockRepository.insert).toHaveBeenCalled();
+      const insertArg = mockRepository.insert.mock.calls[0][0];
+      expect(parseFloat(insertArg.bodyFatPercentage)).toBeGreaterThan(0);
     });
 
     it('should calculate Navy body fat for male with neck and waist', async () => {
-      const measurement = makeMeasurement({
-        neck: '38.00',
-        waist: '85.00',
-        navyBodyFatPercentage: '18.50',
-        leanMass: '65.20',
-        fatMass: '14.80',
-      });
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+      mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
-      mockRepository.insert.mockResolvedValue(measurement);
+      await service.create(
+        USER_ID,
+        makeCreateMeasurementInput({ neck: 38, waist: 85 }),
+      );
 
-      const result = await service.create(userId, {
-        ...baseCreateDto,
-        neck: 38,
-        waist: 85,
-      });
-
-      expect(result).toEqual(measurement);
-      expect(mockRepository.insert).toHaveBeenCalled();
+      const insertArg = mockRepository.insert.mock.calls[0][0];
+      // Pollock not run (no skinfolds), so bodyFatPercentage is undefined (null?.toString())
+      expect(insertArg.bodyFatPercentage).toBeUndefined();
+      expect(parseFloat(insertArg.navyBodyFatPercentage)).toBeGreaterThan(0);
     });
 
-    it('should calculate Navy body fat for female with neck, waist, and hip', async () => {
-      const measurement = makeMeasurement({
-        neck: '33.00',
-        waist: '72.00',
-        hip: '96.00',
-        navyBodyFatPercentage: '26.40',
-        leanMass: '58.88',
-        fatMass: '21.12',
-      });
+    it('should calculate Navy body fat for female with neck, waist and hip', async () => {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+      mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      mockRepository.findUserById.mockResolvedValue(
-        makeUserForMeasurement({ sex: 'female' }),
+      await service.create(
+        USER_ID,
+        makeCreateMeasurementInput({ neck: 33, waist: 72, hip: 96 }),
       );
-      mockRepository.insert.mockResolvedValue(measurement);
 
-      const result = await service.create(userId, {
-        ...baseCreateDto,
-        neck: 33,
-        waist: 72,
-        hip: 96,
-      });
-
-      expect(result).toEqual(measurement);
-      expect(mockRepository.insert).toHaveBeenCalled();
+      const insertArg = mockRepository.insert.mock.calls[0][0];
+      expect(parseFloat(insertArg.navyBodyFatPercentage)).toBeGreaterThan(0);
     });
 
     it('should not calculate Navy body fat for female without hip', async () => {
-      const measurement = makeMeasurement();
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+      mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      mockRepository.findUserById.mockResolvedValue(
-        makeUserForMeasurement({ sex: 'female' }),
+      await service.create(
+        USER_ID,
+        makeCreateMeasurementInput({ neck: 33, waist: 72 }),
       );
-      mockRepository.insert.mockResolvedValue(measurement);
 
-      const result = await service.create(userId, {
-        ...baseCreateDto,
-        neck: 33,
-        waist: 72,
-      });
-
-      expect(result).toEqual(measurement);
-      expect(mockRepository.insert).toHaveBeenCalled();
+      const insertArg = mockRepository.insert.mock.calls[0][0];
+      // Navy not calculated (missing hip), navyBodyFatPercentage is undefined (null?.toString())
+      expect(insertArg.navyBodyFatPercentage).toBeUndefined();
     });
   });
 
   describe('findAllByUser', () => {
-    it('should return all measurements for a user ordered by date', async () => {
-      const measurements = [
+    it('should return mapped MeasurementResponse list', async () => {
+      const filters = makeListMeasurementsInput();
+      mockRepository.findAllByUser.mockResolvedValue([
         makeMeasurement({ measurementDate: '2024-01-15' }),
         makeMeasurement({ id: 'another-id', measurementDate: '2024-01-10' }),
-      ];
-      mockRepository.findAllByUser.mockResolvedValue(measurements);
+      ]);
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
-      const result = await service.findAllByUser(userId);
+      const result = await service.findAllByUser(USER_ID, filters);
 
-      expect(result).toEqual(measurements);
       expect(result).toHaveLength(2);
-      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(userId);
+      expect(result[0]).not.toHaveProperty('triceps');
+      expect(result[0]).toHaveProperty('skinfolds');
+      expect(result[0]).toHaveProperty('calculated');
+      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(USER_ID, filters);
     });
 
     it('should return empty array when user has no measurements', async () => {
       mockRepository.findAllByUser.mockResolvedValue([]);
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
-      const result = await service.findAllByUser(userId);
+      const result = await service.findAllByUser(USER_ID, makeListMeasurementsInput());
 
       expect(result).toEqual([]);
+    });
+
+    it('should forward date filters to the repository', async () => {
+      const filters = makeListMeasurementsInput({ from: '2024-01-01', to: '2024-01-31' });
+      mockRepository.findAllByUser.mockResolvedValue([]);
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+      await service.findAllByUser(USER_ID, filters);
+
+      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(USER_ID, filters);
     });
   });
 
   describe('findOne', () => {
-    it('should return a measurement by id for the given user', async () => {
-      const measurement = makeMeasurement();
-      mockRepository.findById.mockResolvedValue(measurement);
+    it('should return a MeasurementResponse when measurement is found', async () => {
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
-      const result = await service.findOne(measurementId, userId);
+      const result = await service.findOne(MEASUREMENT_ID, USER_ID);
 
-      expect(result).toEqual(measurement);
-      expect(result.id).toBe(measurementId);
-      expect(result.userId).toBe(userId);
+      expect(result).toEqual(makeMeasurementResponse());
+      expect(mockRepository.findById).toHaveBeenCalledWith(MEASUREMENT_ID, USER_ID);
     });
 
-    it('should throw NotFoundException when measurement not found', async () => {
+    it('should throw NotFoundException when measurement is not found or belongs to another user', async () => {
       mockRepository.findById.mockResolvedValue(null);
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
-      await expect(service.findOne('non-existent-id', userId)).rejects.toThrow(
+      await expect(service.findOne('non-existent-id', USER_ID)).rejects.toThrow(
         NotFoundException,
       );
-      await expect(service.findOne('non-existent-id', userId)).rejects.toThrow(
+      await expect(service.findOne('non-existent-id', USER_ID)).rejects.toThrow(
         'Measurement not found',
       );
-    });
-
-    it('should throw NotFoundException when measurement belongs to another user', async () => {
-      mockRepository.findById.mockResolvedValue(null);
-
-      await expect(
-        service.findOne(measurementId, 'different-user-id'),
-      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('update', () => {
-    const updateDto: UpdateMeasurementDto = { weight: 82 };
-
-    it('should update a measurement successfully', async () => {
-      const updated = makeMeasurement({ weight: '82.00' });
+    it('should update and return MeasurementResponse when successful', async () => {
+      const updatedRaw = makeMeasurement({ weight: '82.00' });
       mockRepository.findById.mockResolvedValue(makeMeasurement());
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
-      mockRepository.update.mockResolvedValue(updated);
+      mockRepository.update.mockResolvedValue(updatedRaw);
 
-      const result = await service.update(measurementId, userId, updateDto);
+      const result = await service.update(MEASUREMENT_ID, USER_ID, { weight: 82 });
 
-      expect(result).toEqual(updated);
-      expect(mockRepository.update).toHaveBeenCalled();
+      expect(result.weight).toBe(82);
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        MEASUREMENT_ID,
+        USER_ID,
+        expect.objectContaining({ weight: '82' }),
+      );
     });
 
-    it('should throw NotFoundException when measurement not found', async () => {
+    it('should throw NotFoundException when measurement is not found', async () => {
       mockRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.update('non-existent-id', userId, updateDto),
+        service.update('non-existent-id', USER_ID, { weight: 82 }),
       ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.update('non-existent-id', USER_ID, { weight: 82 }),
+      ).rejects.toThrow('Measurement not found');
+      expect(mockRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when user is not found', async () => {
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(null);
+
+      await expect(
+        service.update(MEASUREMENT_ID, USER_ID, { weight: 82 }),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.update(MEASUREMENT_ID, USER_ID, { weight: 82 }),
+      ).rejects.toThrow('User not found');
+      expect(mockRepository.update).not.toHaveBeenCalled();
     });
   });
 
   describe('remove', () => {
-    it('should remove a measurement successfully', async () => {
+    it('should delete the measurement when it exists', async () => {
       mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
       mockRepository.delete.mockResolvedValue(undefined);
 
-      await service.remove(measurementId, userId);
+      await service.remove(MEASUREMENT_ID, USER_ID);
 
-      expect(mockRepository.delete).toHaveBeenCalledWith(measurementId, userId);
+      expect(mockRepository.delete).toHaveBeenCalledWith(MEASUREMENT_ID, USER_ID);
     });
 
-    it('should throw NotFoundException when measurement not found', async () => {
+    it('should throw NotFoundException when measurement is not found', async () => {
       mockRepository.findById.mockResolvedValue(null);
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
-      await expect(service.remove('non-existent-id', userId)).rejects.toThrow(
+      await expect(service.remove('non-existent-id', USER_ID)).rejects.toThrow(
         NotFoundException,
       );
+      expect(mockRepository.delete).not.toHaveBeenCalled();
     });
   });
 });

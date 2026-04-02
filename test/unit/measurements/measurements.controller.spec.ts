@@ -3,24 +3,20 @@ import { MeasurementsController } from '@/measurements/measurements.controller';
 import { MeasurementsService } from '@/measurements/measurements.service';
 import { CreateMeasurementDto } from '@/measurements/dto/create-measurement.dto';
 import { UpdateMeasurementDto } from '@/measurements/dto/update-measurement.dto';
+import { ListMeasurementsDto } from '@/measurements/dto/list-measurements.dto';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
-import { makeMeasurement } from '@test/stubs/measurement.stub';
+import {
+  makeMeasurementResponse,
+  makeListMeasurementsInput,
+  USER_ID,
+  MEASUREMENT_ID,
+} from '@test/stubs/measurement.stub';
 
 describe('MeasurementsController', () => {
   let controller: MeasurementsController;
 
-  const userId = '123e4567-e89b-12d3-a456-426614174000';
-  const measurementId = '223e4567-e89b-12d3-a456-426614174001';
-
-  const mockRequest = { user: { id: userId } };
-
-  const createDto: CreateMeasurementDto = {
-    measurementDate: '2024-01-15',
-    weight: 80,
-  };
-
-  const updateDto: UpdateMeasurementDto = { weight: 82 };
+  const mockRequest = { user: { id: USER_ID } };
 
   const mockMeasurementsService = {
     create: jest.fn(),
@@ -46,104 +42,111 @@ describe('MeasurementsController', () => {
     controller = module.get<MeasurementsController>(MeasurementsController);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  afterEach(() => jest.clearAllMocks());
 
   describe('create', () => {
-    it('should create a measurement and return it', async () => {
-      const measurement = makeMeasurement();
-      mockMeasurementsService.create.mockResolvedValue(measurement);
+    it('should map dto to CreateMeasurementInput, call service.create and return its result', async () => {
+      const dto: CreateMeasurementDto = { measurementDate: '2024-01-15', weight: 80 };
+      const expected = makeMeasurementResponse();
+      mockMeasurementsService.create.mockResolvedValue(expected);
 
-      const result = await controller.create(mockRequest, createDto);
+      const result = await controller.create(mockRequest, dto);
 
-      expect(result).toEqual(measurement);
+      expect(result).toEqual(expected);
       expect(mockMeasurementsService.create).toHaveBeenCalledWith(
-        userId,
-        createDto,
+        USER_ID,
+        expect.objectContaining({ measurementDate: '2024-01-15', weight: 80 }),
       );
-      expect(mockMeasurementsService.create).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('findAll', () => {
-    it('should return all measurements for the authenticated user', async () => {
-      const measurements = [
-        makeMeasurement(),
-        makeMeasurement({ id: 'another-id' }),
-      ];
-      mockMeasurementsService.findAllByUser.mockResolvedValue(measurements);
+    it('should map query to ListMeasurementsInput, call service.findAllByUser and return its result', async () => {
+      const query: ListMeasurementsDto = { limit: 20, offset: 0 };
+      const expected = [makeMeasurementResponse(), makeMeasurementResponse({ id: 'another-id' })];
+      mockMeasurementsService.findAllByUser.mockResolvedValue(expected);
 
-      const result = await controller.findAll(mockRequest);
+      const result = await controller.findAll(mockRequest, query);
 
-      expect(result).toEqual(measurements);
+      expect(result).toEqual(expected);
       expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledWith(
-        userId,
+        USER_ID,
+        makeListMeasurementsInput(),
       );
-      expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('should forward date filters to service.findAllByUser', async () => {
+      const query: ListMeasurementsDto = {
+        limit: 10,
+        offset: 5,
+        from: '2024-01-01',
+        to: '2024-01-31',
+      };
+      mockMeasurementsService.findAllByUser.mockResolvedValue([]);
+
+      await controller.findAll(mockRequest, query);
+
+      expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledWith(USER_ID, {
+        limit: 10,
+        offset: 5,
+        from: '2024-01-01',
+        to: '2024-01-31',
+      });
     });
 
     it('should return empty array when user has no measurements', async () => {
+      const query: ListMeasurementsDto = {};
       mockMeasurementsService.findAllByUser.mockResolvedValue([]);
 
-      const result = await controller.findAll(mockRequest);
+      const result = await controller.findAll(mockRequest, query);
 
       expect(result).toEqual([]);
-      expect(mockMeasurementsService.findAllByUser).toHaveBeenCalledWith(
-        userId,
-      );
     });
   });
 
   describe('findOne', () => {
-    it('should return a single measurement by id', async () => {
-      const measurement = makeMeasurement();
-      mockMeasurementsService.findOne.mockResolvedValue(measurement);
+    it('should call service.findOne with id and userId and return its result', async () => {
+      const expected = makeMeasurementResponse();
+      mockMeasurementsService.findOne.mockResolvedValue(expected);
 
-      const result = await controller.findOne(mockRequest, measurementId);
+      const result = await controller.findOne(mockRequest, MEASUREMENT_ID);
 
-      expect(result).toEqual(measurement);
+      expect(result).toEqual(expected);
       expect(mockMeasurementsService.findOne).toHaveBeenCalledWith(
-        measurementId,
-        userId,
+        MEASUREMENT_ID,
+        USER_ID,
       );
-      expect(mockMeasurementsService.findOne).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('update', () => {
-    it('should update a measurement and return the updated result', async () => {
-      const updated = makeMeasurement({ weight: '82.00' });
-      mockMeasurementsService.update.mockResolvedValue(updated);
+    it('should map dto to UpdateMeasurementInput, call service.update and return its result', async () => {
+      const dto: UpdateMeasurementDto = { weight: 82 };
+      const expected = makeMeasurementResponse({ weight: 82 });
+      mockMeasurementsService.update.mockResolvedValue(expected);
 
-      const result = await controller.update(
-        mockRequest,
-        measurementId,
-        updateDto,
-      );
+      const result = await controller.update(mockRequest, MEASUREMENT_ID, dto);
 
-      expect(result).toEqual(updated);
+      expect(result).toEqual(expected);
       expect(mockMeasurementsService.update).toHaveBeenCalledWith(
-        measurementId,
-        userId,
-        updateDto,
+        MEASUREMENT_ID,
+        USER_ID,
+        expect.objectContaining({ weight: 82 }),
       );
-      expect(mockMeasurementsService.update).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('remove', () => {
-    it('should remove a measurement and return undefined', async () => {
+    it('should call service.remove with id and userId and return undefined', async () => {
       mockMeasurementsService.remove.mockResolvedValue(undefined);
 
-      const result = await controller.remove(mockRequest, measurementId);
+      const result = await controller.remove(mockRequest, MEASUREMENT_ID);
 
       expect(result).toBeUndefined();
       expect(mockMeasurementsService.remove).toHaveBeenCalledWith(
-        measurementId,
-        userId,
+        MEASUREMENT_ID,
+        USER_ID,
       );
-      expect(mockMeasurementsService.remove).toHaveBeenCalledTimes(1);
     });
   });
 });
