@@ -20,7 +20,7 @@ import {
 jest.mock('bcrypt');
 jest.mock('crypto', () => ({
   randomBytes: jest.fn().mockReturnValue({
-    toString: jest.fn().mockReturnValue(REFRESH_TOKEN_VALUE),
+    toString: jest.fn().mockReturnValue('mock-refresh-token'),
   }),
 }));
 
