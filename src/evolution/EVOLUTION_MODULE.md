@@ -164,6 +164,8 @@ interface DeltaResult {
   measurementId: string;
   previousMeasurementId: string | null; // null = first measurement, no previous exists
   delta: {
+    // composite signal — see scoring algorithm below
+    compositionBalance: DeltaDirection;
     // body composition
     weight: DeltaDirection;
     bodyFatPercentage: DeltaDirection;   // resolved: Pollock > Navy
@@ -204,9 +206,32 @@ type DeltaDirection = 'up' | 'down' | 'stable' | null;
 - `delta.field: null` — field was not recorded in one or both measurements
 - `'stable'` — absolute difference is below the field threshold (see table below)
 - `'up'` / `'down'` — direction of change: current minus previous
+- For `compositionBalance`: `'up'` = composition improving, `'down'` = worsening (see algorithm below)
 - The API returns direction only — semantic interpretation (good/bad) is the frontend's responsibility
 - "Previous" is the most recent measurement with `measurementDate` strictly before the current one
 - Individual skinfold fields are `null` when either measurement has no skinfold data
+
+**`compositionBalance` scoring algorithm:**
+
+Produces a weighted score across three signal groups. `null` when no signal has data.
+
+| Signal         | Condition                   | Points |
+| -------------- | --------------------------- | ------ |
+| Lean mass      | `leanMass` went up          | +2     |
+| Lean mass      | `leanMass` went down        | −2     |
+| Fat mass       | `fatMass` went down         | +2     |
+| Fat mass       | `fatMass` went up           | −2     |
+| Skinfold sum   | `skinfoldSum` went down     | +1     |
+| Skinfold sum   | `skinfoldSum` went up       | +1     |
+| WHR (raw)      | `waist/hip` ratio went down | +1     |
+| WHR (raw)      | `waist/hip` ratio went up   | −1     |
+
+- Score > 0 → `'up'` (improving)
+- Score < 0 → `'down'` (worsening)
+- Score = 0 → `'stable'`
+- No signals available → `null`
+
+WHR is compared as raw ratio without sex classification (lower is always better directionally).
 
 **Stability thresholds (fixed, server-side):**
 
@@ -217,6 +242,7 @@ type DeltaDirection = 'up' | 'down' | 'stable' | null;
 | leanMass / fatMass                         | ± 0.2 kg   |
 | triceps / subscapular / chest / midaxillary / suprailiac / abdominal / thigh | ± 1.0 mm |
 | skinfoldSum                                | ± 2.0 mm   |
+| WHR (compositionBalance only)              | ± 0.01     |
 | neck / waist / hip / shoulders / chestCirc / leftThigh / rightThigh / leftCalf / rightCalf / leftBicepRelaxed / rightBicepRelaxed / leftBicepFlexed / rightBicepFlexed | ± 0.5 cm |
 
 **Errors:**
@@ -298,6 +324,7 @@ export interface LatestResult {
 export type DeltaDirection = 'up' | 'down' | 'stable' | null;
 
 export interface DeltaFields {
+  compositionBalance: DeltaDirection;
   weight: DeltaDirection;
   bodyFatPercentage: DeltaDirection;
   leanMass: DeltaDirection;

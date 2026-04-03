@@ -32,8 +32,18 @@ export class EvolutionController {
   @Permissions('measurements:read')
   @ApiOperation({ summary: 'Get evolution summary for the authenticated user' })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 30 })
-  @ApiQuery({ name: 'from', required: false, type: String, example: '2025-01-01' })
-  @ApiQuery({ name: 'to', required: false, type: String, example: '2025-12-31' })
+  @ApiQuery({
+    name: 'from',
+    required: false,
+    type: String,
+    example: '2025-01-01',
+  })
+  @ApiQuery({
+    name: 'to',
+    required: false,
+    type: String,
+    example: '2025-12-31',
+  })
   @ApiResponse({ status: 200, description: 'Returns evolution summary' })
   getSummary(
     @Request() req: { user: { id: string } },
@@ -83,8 +93,13 @@ export class EvolutionController {
 
   @Get('delta/:measurementId')
   @Permissions('measurements:read')
-  @ApiOperation({ summary: 'Get per-field direction indicators vs the previous measurement' })
-  @ApiResponse({ status: 200, description: 'Returns delta directions per field' })
+  @ApiOperation({
+    summary: 'Get per-field direction indicators vs the previous measurement',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns delta directions per field',
+  })
   @ApiResponse({ status: 404, description: 'Measurement not found' })
   getDelta(
     @Request() req: { user: { id: string } },

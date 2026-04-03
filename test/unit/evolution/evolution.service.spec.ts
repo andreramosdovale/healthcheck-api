@@ -382,5 +382,158 @@ describe('EvolutionService', () => {
 
       await expect(service.getDelta(USER_ID, toId)).rejects.toThrow('Measurement not found');
     });
+
+    describe('compositionBalance', () => {
+      it('should return null when no composition data is available', async () => {
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBeNull();
+      });
+
+      it('should return up when lean mass increased and fat mass decreased', async () => {
+        // leanMass: 60 → 62 (+2kg, > 0.2 threshold) → +2 score
+        // fatMass: 20 → 18 (-2kg, > 0.2 threshold) → +2 score
+        // total score = +4 → 'up'
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, leanMass: '62.00', fatMass: '18.00' }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, leanMass: '60.00', fatMass: '20.00' }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('up');
+      });
+
+      it('should return down when lean mass decreased and fat mass increased', async () => {
+        // leanMass: 62 → 60 (-2kg) → -2 score
+        // fatMass: 18 → 20 (+2kg) → -2 score
+        // total score = -4 → 'down'
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, leanMass: '60.00', fatMass: '20.00' }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, leanMass: '62.00', fatMass: '18.00' }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('down');
+      });
+
+      it('should return up when skinfold sum decreased', async () => {
+        // all skinfolds: 20 → 10 (sum: 140 → 70, diff = -70 > 2mm threshold) → +1 score
+        const highSkinfolds = { triceps: '20.00', subscapular: '20.00', chest: '20.00', midaxillary: '20.00', suprailiac: '20.00', abdominal: '20.00', thigh: '20.00' };
+        const lowSkinfolds  = { triceps: '10.00', subscapular: '10.00', chest: '10.00', midaxillary: '10.00', suprailiac: '10.00', abdominal: '10.00', thigh: '10.00' };
+
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, ...lowSkinfolds }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, ...highSkinfolds }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('up');
+      });
+
+      it('should return down when skinfold sum increased', async () => {
+        const lowSkinfolds  = { triceps: '10.00', subscapular: '10.00', chest: '10.00', midaxillary: '10.00', suprailiac: '10.00', abdominal: '10.00', thigh: '10.00' };
+        const highSkinfolds = { triceps: '20.00', subscapular: '20.00', chest: '20.00', midaxillary: '20.00', suprailiac: '20.00', abdominal: '20.00', thigh: '20.00' };
+
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, ...highSkinfolds }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, ...lowSkinfolds }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('down');
+      });
+
+      it('should return up when raw WHR improved (ratio decreased)', async () => {
+        // previous: 90/100 = 0.90, current: 88/100 = 0.88 → diff = -0.02 > 0.01 threshold → +1 score
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, waist: '88.00', hip: '100.00' }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, waist: '90.00', hip: '100.00' }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('up');
+      });
+
+      it('should return down when raw WHR worsened (ratio increased)', async () => {
+        // previous: 88/100 = 0.88, current: 90/100 = 0.90 → diff = +0.02 → -1 score
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, waist: '90.00', hip: '100.00' }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, waist: '88.00', hip: '100.00' }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('down');
+      });
+
+      it('should return null for WHR signal when waist or hip is missing', async () => {
+        // only waist present, no hip → WHR signal = null → no signals at all → null
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, waist: '90.00' }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, waist: '88.00' }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBeNull();
+      });
+
+      it('should return stable when opposing signals cancel out', async () => {
+        // leanMass up (+2) and fatMass up (-2) → score = 0, but has signals → 'stable'
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, leanMass: '62.00', fatMass: '20.00' }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, leanMass: '60.00', fatMass: '18.00' }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('stable');
+      });
+
+      it('should return up when mixed signals resolve positively', async () => {
+        // leanMass up (+2), fatMass up (-2), skinfoldSum down (+1) → score = +1 → 'up'
+        const lowSkinfolds  = { triceps: '10.00', subscapular: '10.00', chest: '10.00', midaxillary: '10.00', suprailiac: '10.00', abdominal: '10.00', thigh: '10.00' };
+        const highSkinfolds = { triceps: '20.00', subscapular: '20.00', chest: '20.00', midaxillary: '20.00', suprailiac: '20.00', abdominal: '20.00', thigh: '20.00' };
+
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ id: toId, userId: USER_ID, leanMass: '62.00', fatMass: '20.00', ...lowSkinfolds }),
+        );
+        mockRepository.findPreviousMeasurement.mockResolvedValue(
+          makeMeasurement({ id: fromId, userId: USER_ID, leanMass: '60.00', fatMass: '18.00', ...highSkinfolds }),
+        );
+
+        const result = await service.getDelta(USER_ID, toId);
+
+        expect(result.delta!.compositionBalance).toBe('up');
+      });
+    });
   });
 });

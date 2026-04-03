@@ -125,11 +125,81 @@ export class EvolutionService {
     };
   }
 
+  private rawWhrDirection(
+    current: Measurement,
+    previous: Measurement,
+  ): DeltaDirection {
+    const currentRatio =
+      current.waist != null && current.hip != null
+        ? parseFloat(current.waist) / parseFloat(current.hip)
+        : null;
+    const previousRatio =
+      previous.waist != null && previous.hip != null
+        ? parseFloat(previous.waist) / parseFloat(previous.hip)
+        : null;
+    return this.directionFromNumbers(currentRatio, previousRatio, 0.01);
+  }
+
+  private scoreSignal(
+    dir: DeltaDirection,
+    weight: number,
+    higherIsBetter: boolean,
+  ): number {
+    if (dir === 'up') return higherIsBetter ? weight : -weight;
+    if (dir === 'down') return higherIsBetter ? -weight : weight;
+    return 0;
+  }
+
+  private computeCompositionBalance(
+    current: Measurement,
+    previous: Measurement,
+  ): DeltaDirection {
+    const signals = [
+      {
+        dir: this.direction(current.leanMass, previous.leanMass, 0.2),
+        weight: 2,
+        higherIsBetter: true,
+      },
+      {
+        dir: this.direction(current.fatMass, previous.fatMass, 0.2),
+        weight: 2,
+        higherIsBetter: false,
+      },
+      {
+        dir: this.directionFromNumbers(
+          this.computeSkinfoldSum(current),
+          this.computeSkinfoldSum(previous),
+          2.0,
+        ),
+        weight: 1,
+        higherIsBetter: false,
+      },
+      {
+        dir: this.rawWhrDirection(current, previous),
+        weight: 1,
+        higherIsBetter: false,
+      },
+    ];
+
+    if (signals.every((s) => s.dir === null)) return null;
+
+    const score = signals.reduce(
+      (acc, { dir, weight, higherIsBetter }) =>
+        acc + this.scoreSignal(dir, weight, higherIsBetter),
+      0,
+    );
+
+    if (score > 0) return 'up';
+    if (score < 0) return 'down';
+    return 'stable';
+  }
+
   private computeDelta(
     current: Measurement,
     previous: Measurement,
   ): DeltaFields {
     return {
+      compositionBalance: this.computeCompositionBalance(current, previous),
       weight: this.direction(current.weight, previous.weight, 0.2),
       bodyFatPercentage: this.directionFromNumbers(
         this.resolveBodyFat(current),

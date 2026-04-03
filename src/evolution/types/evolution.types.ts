@@ -47,6 +47,9 @@ export interface LatestResult {
 }
 
 export interface DeltaFields {
+  // composite signal — up = composition improving, down = worsening
+  compositionBalance: DeltaDirection;
+  // body composition
   weight: DeltaDirection;
   bodyFatPercentage: DeltaDirection;
   leanMass: DeltaDirection;

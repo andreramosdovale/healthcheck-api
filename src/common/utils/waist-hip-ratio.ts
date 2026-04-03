@@ -19,10 +19,7 @@ const WHR_THRESHOLDS = {
   female: { low: 0.8, high: 0.85 },
 } as const;
 
-function classifyRisk(
-  value: number,
-  sex: 'male' | 'female',
-): WhrRisk {
+function classifyRisk(value: number, sex: 'male' | 'female'): WhrRisk {
   const { low, high } = WHR_THRESHOLDS[sex];
   if (value < low) return 'low';
   if (value < high) return 'moderate';

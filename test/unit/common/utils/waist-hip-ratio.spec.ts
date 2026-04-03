@@ -1,4 +1,4 @@
-import { calculateWaistHipRatio } from '@/measurements/utils/waist-hip-ratio';
+import { calculateWaistHipRatio } from '@/common/utils/waist-hip-ratio';
 
 describe('calculateWaistHipRatio', () => {
   it('should return the ratio rounded to 2 decimal places', () => {

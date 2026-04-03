@@ -230,6 +230,102 @@ describe('MeasurementsService', () => {
         'Measurement not found',
       );
     });
+
+    describe('leanMassPercentage', () => {
+      it('should compute leanMassPercentage from Pollock bodyFatPercentage', async () => {
+        // bodyFatPercentage = 20% → leanMassPercentage = 80%
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ bodyFatPercentage: '20.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.leanMassPercentage).toBe(80);
+      });
+
+      it('should compute leanMassPercentage from Navy navyBodyFatPercentage when Pollock is absent', async () => {
+        // navyBodyFatPercentage = 25% → leanMassPercentage = 75%
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ navyBodyFatPercentage: '25.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.leanMassPercentage).toBe(75);
+      });
+
+      it('should return leanMassPercentage null when no body fat data is available', async () => {
+        mockRepository.findById.mockResolvedValue(makeMeasurement());
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.leanMassPercentage).toBeNull();
+      });
+    });
+
+    describe('waistHipRatio', () => {
+      it('should compute waistHipRatio when waist and hip are present', async () => {
+        // waist = 85, hip = 100 → ratio = 0.85
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ waist: '85.00', hip: '100.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.waistHipRatio).not.toBeNull();
+        expect(result.calculated.waistHipRatio!.value).toBe(0.85);
+      });
+
+      it('should classify risk using user sex — male low risk when ratio < 0.90', async () => {
+        // waist = 85, hip = 100 → ratio = 0.85 → male low
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ waist: '85.00', hip: '100.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.waistHipRatio!.risk).toBe('low');
+      });
+
+      it('should classify risk using user sex — female moderate risk when ratio is 0.80–0.85', async () => {
+        // waist = 82, hip = 100 → ratio = 0.82 → female moderate
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ waist: '82.00', hip: '100.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.waistHipRatio!.risk).toBe('moderate');
+      });
+
+      it('should return waistHipRatio null when waist is missing', async () => {
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ hip: '100.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.waistHipRatio).toBeNull();
+      });
+
+      it('should return waistHipRatio null when hip is missing', async () => {
+        mockRepository.findById.mockResolvedValue(
+          makeMeasurement({ waist: '85.00' }),
+        );
+        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+        const result = await service.findOne(MEASUREMENT_ID, USER_ID);
+
+        expect(result.calculated.waistHipRatio).toBeNull();
+      });
+    });
   });
 
   describe('update', () => {

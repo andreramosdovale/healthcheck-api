@@ -1,5 +1,5 @@
 import type { Measurement, MeasurementResponse } from '../types/measurements.types';
-import { calculateWaistHipRatio } from './waist-hip-ratio';
+import { calculateWaistHipRatio } from '@/common/utils/waist-hip-ratio';
 
 const SKINFOLD_FIELDS = [
   'triceps',
