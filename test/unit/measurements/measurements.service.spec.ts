@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { MeasurementsService } from '@/measurements/measurements.service';
 import { MeasurementsRepository } from '@/measurements/measurements.repository';
+import type { MeasurementInsertData } from '@/measurements/types/measurements.types';
 import {
   makeMeasurement,
   makeMeasurementResponse,
@@ -62,7 +63,10 @@ describe('MeasurementsService', () => {
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
       mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      const result = await service.create(USER_ID, makeCreateMeasurementInput());
+      const result = await service.create(
+        USER_ID,
+        makeCreateMeasurementInput(),
+      );
 
       expect(result).toEqual(makeMeasurementResponse());
       expect(mockRepository.insert).toHaveBeenCalledWith(
@@ -99,10 +103,15 @@ describe('MeasurementsService', () => {
     });
 
     it('should pass bodyFatPercentage via Pollock for male with all skinfolds', async () => {
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'male' }),
+      );
       mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      await service.create(USER_ID, makeCreateMeasurementInput(allSkinfoldInput));
+      await service.create(
+        USER_ID,
+        makeCreateMeasurementInput(allSkinfoldInput),
+      );
 
       expect(mockRepository.insert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -111,24 +120,35 @@ describe('MeasurementsService', () => {
           fatMass: expect.any(String),
         }),
       );
-      const insertArg = mockRepository.insert.mock.calls[0][0];
+      const [[insertArg]] = mockRepository.insert.mock.calls as [
+        [MeasurementInsertData],
+      ];
       expect(parseFloat(insertArg.bodyFatPercentage)).toBeGreaterThan(0);
       // null?.toString() yields undefined — the navy field is absent when Pollock runs
       expect(insertArg.navyBodyFatPercentage).toBeUndefined();
     });
 
     it('should pass bodyFatPercentage via Pollock for female with all skinfolds', async () => {
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'female' }),
+      );
       mockRepository.insert.mockResolvedValue(makeMeasurement());
 
-      await service.create(USER_ID, makeCreateMeasurementInput(allSkinfoldInput));
+      await service.create(
+        USER_ID,
+        makeCreateMeasurementInput(allSkinfoldInput),
+      );
 
-      const insertArg = mockRepository.insert.mock.calls[0][0];
+      const [[insertArg]] = mockRepository.insert.mock.calls as [
+        [MeasurementInsertData],
+      ];
       expect(parseFloat(insertArg.bodyFatPercentage)).toBeGreaterThan(0);
     });
 
     it('should calculate Navy body fat for male with neck and waist', async () => {
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'male' }),
+      );
       mockRepository.insert.mockResolvedValue(makeMeasurement());
 
       await service.create(
@@ -136,14 +156,18 @@ describe('MeasurementsService', () => {
         makeCreateMeasurementInput({ neck: 38, waist: 85 }),
       );
 
-      const insertArg = mockRepository.insert.mock.calls[0][0];
+      const [[insertArg]] = mockRepository.insert.mock.calls as [
+        [MeasurementInsertData],
+      ];
       // Pollock not run (no skinfolds), so bodyFatPercentage is undefined (null?.toString())
       expect(insertArg.bodyFatPercentage).toBeUndefined();
       expect(parseFloat(insertArg.navyBodyFatPercentage)).toBeGreaterThan(0);
     });
 
     it('should calculate Navy body fat for female with neck, waist and hip', async () => {
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'female' }),
+      );
       mockRepository.insert.mockResolvedValue(makeMeasurement());
 
       await service.create(
@@ -151,12 +175,16 @@ describe('MeasurementsService', () => {
         makeCreateMeasurementInput({ neck: 33, waist: 72, hip: 96 }),
       );
 
-      const insertArg = mockRepository.insert.mock.calls[0][0];
+      const [[insertArg]] = mockRepository.insert.mock.calls as [
+        [MeasurementInsertData],
+      ];
       expect(parseFloat(insertArg.navyBodyFatPercentage)).toBeGreaterThan(0);
     });
 
     it('should not calculate Navy body fat for female without hip', async () => {
-      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'female' }),
+      );
       mockRepository.insert.mockResolvedValue(makeMeasurement());
 
       await service.create(
@@ -164,9 +192,52 @@ describe('MeasurementsService', () => {
         makeCreateMeasurementInput({ neck: 33, waist: 72 }),
       );
 
-      const insertArg = mockRepository.insert.mock.calls[0][0];
+      const [[insertArg]] = mockRepository.insert.mock.calls as [
+        [MeasurementInsertData],
+      ];
       // Navy not calculated (missing hip), navyBodyFatPercentage is undefined (null?.toString())
       expect(insertArg.navyBodyFatPercentage).toBeUndefined();
+    });
+
+    it('should throw BadRequestException with MEASUREMENT_IMPLAUSIBLE when skinfold sum is out of range', async () => {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+      // sum = 7 * 2 = 14mm < 20mm minimum
+      const implausibleSkinfolds = makeCreateMeasurementInput({
+        triceps: 2,
+        subscapular: 2,
+        chest: 2,
+        midaxillary: 2,
+        suprailiac: 2,
+        abdominal: 2,
+        thigh: 2,
+      });
+
+      await expect(
+        service.create(USER_ID, implausibleSkinfolds),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.create(USER_ID, implausibleSkinfolds),
+      ).rejects.toThrow(
+        'One or more measurement values are physiologically implausible.',
+      );
+      expect(mockRepository.insert).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException with MEASUREMENT_IMPLAUSIBLE when waist/hip ratio exceeds 1.5', async () => {
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+      // waist = 180, hip = 100 → ratio = 1.8 > 1.5
+      const implausibleCirc = makeCreateMeasurementInput({
+        waist: 180,
+        hip: 100,
+      });
+
+      await expect(service.create(USER_ID, implausibleCirc)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.create(USER_ID, implausibleCirc)).rejects.toThrow(
+        'One or more measurement values are physiologically implausible.',
+      );
+      expect(mockRepository.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -185,26 +256,38 @@ describe('MeasurementsService', () => {
       expect(result[0]).not.toHaveProperty('triceps');
       expect(result[0]).toHaveProperty('skinfolds');
       expect(result[0]).toHaveProperty('calculated');
-      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(USER_ID, filters);
+      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(
+        USER_ID,
+        filters,
+      );
     });
 
     it('should return empty array when user has no measurements', async () => {
       mockRepository.findAllByUser.mockResolvedValue([]);
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
-      const result = await service.findAllByUser(USER_ID, makeListMeasurementsInput());
+      const result = await service.findAllByUser(
+        USER_ID,
+        makeListMeasurementsInput(),
+      );
 
       expect(result).toEqual([]);
     });
 
     it('should forward date filters to the repository', async () => {
-      const filters = makeListMeasurementsInput({ from: '2024-01-01', to: '2024-01-31' });
+      const filters = makeListMeasurementsInput({
+        from: '2024-01-01',
+        to: '2024-01-31',
+      });
       mockRepository.findAllByUser.mockResolvedValue([]);
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
 
       await service.findAllByUser(USER_ID, filters);
 
-      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(USER_ID, filters);
+      expect(mockRepository.findAllByUser).toHaveBeenCalledWith(
+        USER_ID,
+        filters,
+      );
     });
   });
 
@@ -216,7 +299,10 @@ describe('MeasurementsService', () => {
       const result = await service.findOne(MEASUREMENT_ID, USER_ID);
 
       expect(result).toEqual(makeMeasurementResponse());
-      expect(mockRepository.findById).toHaveBeenCalledWith(MEASUREMENT_ID, USER_ID);
+      expect(mockRepository.findById).toHaveBeenCalledWith(
+        MEASUREMENT_ID,
+        USER_ID,
+      );
     });
 
     it('should throw NotFoundException when measurement is not found or belongs to another user', async () => {
@@ -272,7 +358,9 @@ describe('MeasurementsService', () => {
         mockRepository.findById.mockResolvedValue(
           makeMeasurement({ waist: '85.00', hip: '100.00' }),
         );
-        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+        mockRepository.findUserById.mockResolvedValue(
+          makeUserForMeasurement({ sex: 'male' }),
+        );
 
         const result = await service.findOne(MEASUREMENT_ID, USER_ID);
 
@@ -285,7 +373,9 @@ describe('MeasurementsService', () => {
         mockRepository.findById.mockResolvedValue(
           makeMeasurement({ waist: '85.00', hip: '100.00' }),
         );
-        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'male' }));
+        mockRepository.findUserById.mockResolvedValue(
+          makeUserForMeasurement({ sex: 'male' }),
+        );
 
         const result = await service.findOne(MEASUREMENT_ID, USER_ID);
 
@@ -297,7 +387,9 @@ describe('MeasurementsService', () => {
         mockRepository.findById.mockResolvedValue(
           makeMeasurement({ waist: '82.00', hip: '100.00' }),
         );
-        mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement({ sex: 'female' }));
+        mockRepository.findUserById.mockResolvedValue(
+          makeUserForMeasurement({ sex: 'female' }),
+        );
 
         const result = await service.findOne(MEASUREMENT_ID, USER_ID);
 
@@ -335,7 +427,9 @@ describe('MeasurementsService', () => {
       mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
       mockRepository.update.mockResolvedValue(updatedRaw);
 
-      const result = await service.update(MEASUREMENT_ID, USER_ID, { weight: 82 });
+      const result = await service.update(MEASUREMENT_ID, USER_ID, {
+        weight: 82,
+      });
 
       expect(result.weight).toBe(82);
       expect(mockRepository.update).toHaveBeenCalledWith(
@@ -369,6 +463,96 @@ describe('MeasurementsService', () => {
       ).rejects.toThrow('User not found');
       expect(mockRepository.update).not.toHaveBeenCalled();
     });
+
+    it('should throw MEASUREMENT_IMPLAUSIBLE when merged skinfold sum is out of range', async () => {
+      // existing measurement has no skinfolds; update provides all 7 with sum = 14mm < 20mm
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+      await expect(
+        service.update(MEASUREMENT_ID, USER_ID, {
+          triceps: 2,
+          subscapular: 2,
+          chest: 2,
+          midaxillary: 2,
+          suprailiac: 2,
+          abdominal: 2,
+          thigh: 2,
+        }),
+      ).rejects.toThrow(
+        'One or more measurement values are physiologically implausible.',
+      );
+      expect(mockRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw MEASUREMENT_IMPLAUSIBLE when merged waist/hip ratio exceeds 1.5', async () => {
+      // existing has hip = 100; update sets waist = 180 → ratio = 1.8
+      mockRepository.findById.mockResolvedValue(
+        makeMeasurement({ hip: '100.00' }),
+      );
+      mockRepository.findUserById.mockResolvedValue(makeUserForMeasurement());
+
+      await expect(
+        service.update(MEASUREMENT_ID, USER_ID, { waist: 180 }),
+      ).rejects.toThrow(
+        'One or more measurement values are physiologically implausible.',
+      );
+      expect(mockRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should recalculate Pollock body fat when all skinfolds are present in merged state', async () => {
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'male' }),
+      );
+      mockRepository.update.mockResolvedValue(makeMeasurement());
+
+      await service.update(MEASUREMENT_ID, USER_ID, {
+        ...allSkinfoldInput,
+        weight: 80,
+      });
+
+      const updateArg = mockRepository.update.mock.calls[0][2];
+      expect(parseFloat(updateArg.bodyFatPercentage)).toBeGreaterThan(0);
+      expect(parseFloat(updateArg.leanMass)).toBeGreaterThan(0);
+      expect(parseFloat(updateArg.fatMass)).toBeGreaterThan(0);
+    });
+
+    it('should recalculate Navy body fat on update when neck and waist are in merged state', async () => {
+      // existing has no neck/waist; update provides them → Navy runs
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'male' }),
+      );
+      mockRepository.update.mockResolvedValue(makeMeasurement());
+
+      await service.update(MEASUREMENT_ID, USER_ID, { neck: 38, waist: 85 });
+
+      const updateArg = mockRepository.update.mock.calls[0][2];
+      expect(parseFloat(updateArg.navyBodyFatPercentage)).toBeGreaterThan(0);
+    });
+
+    it('should not overwrite leanMass from Pollock when Navy also runs on update', async () => {
+      // Pollock runs (skinfolds) → sets leanMass; Navy also has data → should NOT override leanMass
+      mockRepository.findById.mockResolvedValue(makeMeasurement());
+      mockRepository.findUserById.mockResolvedValue(
+        makeUserForMeasurement({ sex: 'male' }),
+      );
+      mockRepository.update.mockResolvedValue(makeMeasurement());
+
+      await service.update(MEASUREMENT_ID, USER_ID, {
+        ...allSkinfoldInput,
+        neck: 38,
+        waist: 85,
+        weight: 80,
+      });
+
+      const updateArg = mockRepository.update.mock.calls[0][2];
+      // Navy ran (navyBodyFatPercentage present) but leanMass comes from Pollock
+      expect(parseFloat(updateArg.navyBodyFatPercentage)).toBeGreaterThan(0);
+      expect(parseFloat(updateArg.bodyFatPercentage)).toBeGreaterThan(0);
+      expect(parseFloat(updateArg.leanMass)).toBeGreaterThan(0);
+    });
   });
 
   describe('remove', () => {
@@ -379,7 +563,10 @@ describe('MeasurementsService', () => {
 
       await service.remove(MEASUREMENT_ID, USER_ID);
 
-      expect(mockRepository.delete).toHaveBeenCalledWith(MEASUREMENT_ID, USER_ID);
+      expect(mockRepository.delete).toHaveBeenCalledWith(
+        MEASUREMENT_ID,
+        USER_ID,
+      );
     });
 
     it('should throw NotFoundException when measurement is not found', async () => {

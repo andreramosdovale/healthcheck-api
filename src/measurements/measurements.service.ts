@@ -20,6 +20,7 @@ import {
   canCalculateNavyFemale,
 } from './utils/body-fat-calculator';
 import { toMeasurementResponse } from './utils/measurement.mapper';
+import { validateMeasurementPlausibility } from './utils/plausibility-validator';
 
 type DtoUpdateValues = Omit<
   MeasurementUpdateData,
@@ -59,11 +60,25 @@ export class MeasurementsService {
     const hasAnySkinfold = SKINFOLD_FIELDS.some((f) => input[f] !== undefined);
 
     if (hasAnySkinfold && !hasAllSkinfolds(input)) {
-      const missingFields = SKINFOLD_FIELDS.filter((f) => input[f] === undefined);
+      const missingFields = SKINFOLD_FIELDS.filter(
+        (f) => input[f] === undefined,
+      );
       throw new BadRequestException({
-        message: 'All 7 skinfold fields must be provided together or none at all.',
+        message:
+          'All 7 skinfold fields must be provided together or none at all.',
         errorCode: 'SKINFOLDS_INCOMPLETE',
         missingFields,
+      });
+    }
+
+    const plausibilityViolations = validateMeasurementPlausibility(input);
+    if (plausibilityViolations.length > 0) {
+      throw new BadRequestException({
+        message:
+          'One or more measurement values are physiologically implausible.',
+        errorCode: 'MEASUREMENT_IMPLAUSIBLE',
+        invalidFields: plausibilityViolations.map((v) => v.field),
+        details: plausibilityViolations.map((v) => v.reason),
       });
     }
 
@@ -75,7 +90,12 @@ export class MeasurementsService {
     let fatMass: number | null = null;
 
     if (hasAllSkinfolds(input)) {
-      const pollockResult = calculatePollockBodyFat(input, age, user.sex, input.weight);
+      const pollockResult = calculatePollockBodyFat(
+        input,
+        age,
+        user.sex,
+        input.weight,
+      );
 
       if (pollockResult) {
         bodyFatPercentage = pollockResult.bodyFatPercentage;
@@ -99,7 +119,12 @@ export class MeasurementsService {
 
     if (canCalculateNavy) {
       const navyResult = calculateNavyBodyFat(
-        { neck: navyInput.neck!, waist: navyInput.waist!, hip: navyInput.hip, height },
+        {
+          neck: navyInput.neck!,
+          waist: navyInput.waist!,
+          hip: navyInput.hip,
+          height,
+        },
         user.sex,
         input.weight,
       );
@@ -201,6 +226,21 @@ export class MeasurementsService {
     const waistMerged = this.mergeNumOrNull(input.waist, existing.waist);
     const hipMerged = this.mergeNumOrNull(input.hip, existing.hip);
 
+    const plausibilityViolations = validateMeasurementPlausibility({
+      ...skinfolds,
+      waist: waistMerged,
+      hip: hipMerged,
+    });
+    if (plausibilityViolations.length > 0) {
+      throw new BadRequestException({
+        message:
+          'One or more measurement values are physiologically implausible.',
+        errorCode: 'MEASUREMENT_IMPLAUSIBLE',
+        invalidFields: plausibilityViolations.map((v) => v.field),
+        details: plausibilityViolations.map((v) => v.reason),
+      });
+    }
+
     const mergedDate = input.measurementDate ?? existing.measurementDate;
     const mergedWeight = input.weight ?? parseFloat(existing.weight);
 
@@ -213,7 +253,12 @@ export class MeasurementsService {
     let fatMass: number | null = null;
 
     if (hasAllSkinfolds(skinfolds)) {
-      const pollockResult = calculatePollockBodyFat(skinfolds, age, user.sex, mergedWeight);
+      const pollockResult = calculatePollockBodyFat(
+        skinfolds,
+        age,
+        user.sex,
+        mergedWeight,
+      );
       if (pollockResult) {
         bodyFatPercentage = pollockResult.bodyFatPercentage;
         leanMass = pollockResult.leanMass;
@@ -235,7 +280,12 @@ export class MeasurementsService {
 
     if (canNavy) {
       const navyResult = calculateNavyBodyFat(
-        { neck: navyInput.neck!, waist: navyInput.waist!, hip: navyInput.hip, height },
+        {
+          neck: navyInput.neck!,
+          waist: navyInput.waist!,
+          hip: navyInput.hip,
+          height,
+        },
         user.sex,
         mergedWeight,
       );
@@ -257,7 +307,11 @@ export class MeasurementsService {
       updatedAt: new Date(),
     };
 
-    const row = await this.measurementsRepository.update(id, userId, updateData);
+    const row = await this.measurementsRepository.update(
+      id,
+      userId,
+      updateData,
+    );
     return toMeasurementResponse(row, user.sex);
   }
 
