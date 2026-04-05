@@ -32,7 +32,10 @@ describe('MeasurementsRepository', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [MeasurementsRepository, { provide: DRIZZLE, useValue: mockDb }],
+      providers: [
+        MeasurementsRepository,
+        { provide: DRIZZLE, useValue: mockDb },
+      ],
     }).compile();
 
     repository = module.get<MeasurementsRepository>(MeasurementsRepository);
@@ -75,7 +78,10 @@ describe('MeasurementsRepository', () => {
       };
       mockDb.select.mockReturnValue(chain);
 
-      const result = await repository.findAllByUser(USER_ID, makeListMeasurementsInput());
+      const result = await repository.findAllByUser(
+        USER_ID,
+        makeListMeasurementsInput(),
+      );
 
       expect(result).toEqual([mockMeasurement]);
       expect(chain.limit).toHaveBeenCalledWith(20);
@@ -111,7 +117,10 @@ describe('MeasurementsRepository', () => {
       };
       mockDb.select.mockReturnValue(chain);
 
-      const result = await repository.findAllByUser(USER_ID, makeListMeasurementsInput());
+      const result = await repository.findAllByUser(
+        USER_ID,
+        makeListMeasurementsInput(),
+      );
 
       expect(result).toEqual([]);
     });
@@ -144,7 +153,9 @@ describe('MeasurementsRepository', () => {
   describe('insert', () => {
     it('should insert and return the created measurement', async () => {
       const mockReturning = jest.fn().mockResolvedValue([mockMeasurement]);
-      const mockValues = jest.fn().mockReturnValue({ returning: mockReturning });
+      const mockValues = jest
+        .fn()
+        .mockReturnValue({ returning: mockReturning });
       mockDb.insert.mockReturnValue({ values: mockValues });
 
       const data = {
@@ -153,7 +164,9 @@ describe('MeasurementsRepository', () => {
         weight: '80.00',
       };
 
-      const result = await repository.insert(data as Parameters<typeof repository.insert>[0]);
+      const result = await repository.insert(
+        data as Parameters<typeof repository.insert>[0],
+      );
 
       expect(result).toEqual(mockMeasurement);
       expect(mockDb.insert).toHaveBeenCalled();
