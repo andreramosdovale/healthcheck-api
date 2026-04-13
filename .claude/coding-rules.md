@@ -6,22 +6,22 @@ General rules for this project:
 - Avoid using `any`
 - Prefer explicit return types on public methods
 - Prefer small, focused functions
-- Services must not exceed 200 lines
+- Services should ideally stay under 200 lines
 - Functions should ideally stay under 40 lines
 
 ---
 
 ## Naming conventions
 
-| Artifact | Class name | File name |
-|---|---|---|
+| Artifact   | Class name       | File name             |
+| ---------- | ---------------- | --------------------- |
 | Controller | `UserController` | `users.controller.ts` |
-| Service | `UserService` | `users.service.ts` |
+| Service    | `UserService`    | `users.service.ts`    |
 | Repository | `UserRepository` | `users.repository.ts` |
-| Module | `UsersModule` | `users.module.ts` |
-| Create DTO | `CreateUserDto` | `create-user.dto.ts` |
-| Update DTO | `UpdateUserDto` | `update-user.dto.ts` |
-| Types file | — | `users.types.ts` |
+| Module     | `UsersModule`    | `users.module.ts`     |
+| Create DTO | `CreateUserDto`  | `create-user.dto.ts`  |
+| Update DTO | `UpdateUserDto`  | `update-user.dto.ts`  |
+| Types file | —                | `users.types.ts`      |
 
 Class names use PascalCase. File names always use kebab-case.
 
@@ -104,11 +104,13 @@ npm run test:unit:watch
 ### What to test per layer
 
 **Service** — test all business logic branches:
+
 - Happy path for each method
 - Every exception that can be thrown (`NotFoundException`, `BadRequestException`, etc.)
 - Edge cases in calculations or conditional logic
 
 **Controller** — test routing and delegation only:
+
 - That each route calls the correct service method with the correct arguments
 - That the return value from the service is passed through unchanged
 - Do not re-test business logic already covered by the service spec
@@ -129,8 +131,10 @@ await Test.createTestingModule({
   controllers: [ResourceController],
   providers: [{ provide: ResourceService, useValue: mockService }],
 })
-  .overrideGuard(JwtAuthGuard).useValue({ canActivate: jest.fn(() => true) })
-  .overrideGuard(PermissionsGuard).useValue({ canActivate: jest.fn(() => true) })
+  .overrideGuard(JwtAuthGuard)
+  .useValue({ canActivate: jest.fn(() => true) })
+  .overrideGuard(PermissionsGuard)
+  .useValue({ canActivate: jest.fn(() => true) })
   .compile();
 ```
 
@@ -192,8 +196,8 @@ Usage in a spec file:
 ```ts
 import { makeUser } from '@test/stubs/user.stub';
 
-const user = makeUser();                              // default
-const inactiveUser = makeUser({ isActive: false });   // override only what matters
+const user = makeUser(); // default
+const inactiveUser = makeUser({ isActive: false }); // override only what matters
 ```
 
 Rules:
