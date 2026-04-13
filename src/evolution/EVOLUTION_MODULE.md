@@ -32,9 +32,10 @@ Returns time-series data for charting, sorted by date ascending.
 
 **Query Parameters:**
 
-- `limit` (optional, default 30): Maximum number of data points
-- `from` (optional): ISO date string (`YYYY-MM-DD`) — filters measurements on or after this date
-- `to` (optional): ISO date string (`YYYY-MM-DD`) — filters measurements on or before this date
+- `limit` (optional, default 30, max 365): Maximum number of data points
+- `from` (optional): ISO date `YYYY-MM-DD` — ignored when `weeks` is present
+- `to` (optional): ISO date `YYYY-MM-DD` — ignored when `weeks` is present
+- `weeks` (optional, integer 1–104): Relative window ending today. Returns `400` if combined with `from` or `to`.
 
 **Response:**
 
@@ -46,10 +47,13 @@ interface SummaryPoint {
   bodyFatMethod: 'pollock' | 'navy' | null; // which method produced the value above
   leanMass: number | null;
   fatMass: number | null;
+  waistHipRatio: number | null;     // raw ratio (waist ÷ hip), 4 decimal places; null if either absent
 }
 ```
 
 **Body fat resolution rule:** when a measurement has both Pollock and Navy values, `bodyFatPercentage` exposes the Pollock value and `bodyFatMethod` is `'pollock'`. When only Navy is available, `bodyFatMethod` is `'navy'`. When neither is available, both fields are `null`. The raw `navyBodyFatPercentage` field is never exposed in the summary — resolution happens server-side.
+
+**`waistHipRatio`:** raw numeric ratio with no sex-based risk classification. Risk classification (`low / moderate / high`) is the client's responsibility — the app already has the user's sex in the profile. Use WHO 2008 thresholds: male low < 0.90, moderate 0.90–0.99, high ≥ 1.00; female low < 0.80, moderate 0.80–0.85, high > 0.85.
 
 Use case: Line charts showing weight, body fat %, lean mass over time.
 
@@ -268,6 +272,7 @@ WHR is compared as raw ratio without sex classification (lower is always better 
 | Weight Line      | `/evolution/summary` | date       | weight                      |
 | Body Fat Line    | `/evolution/summary` | date       | bodyFatPercentage           |
 | Body Composition | `/evolution/summary` | date       | leanMass, fatMass (stacked) |
+| WHR Trend        | `/evolution/summary` | date       | waistHipRatio               |
 | Before/After     | `/evolution/compare` | from vs to | all metrics                 |
 
 ---
@@ -293,6 +298,13 @@ export type TrendCode =
   | 'weight_gain'
   | 'weight_stable';
 
+export interface GetSummaryInput {
+  limit: number;
+  from?: string;
+  to?: string;
+  weeks?: number; // 1–104; mutually exclusive with from/to
+}
+
 export interface SummaryPoint {
   date: string;
   weight: number;
@@ -300,6 +312,7 @@ export interface SummaryPoint {
   bodyFatMethod: 'pollock' | 'navy' | null;
   leanMass: number | null;
   fatMass: number | null;
+  waistHipRatio: number | null;
 }
 
 export interface CompareResult {

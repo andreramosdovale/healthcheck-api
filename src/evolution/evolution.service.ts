@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { EvolutionRepository } from './evolution.repository';
 import type { Measurement } from '@/measurements/types/measurements.types';
 import type {
@@ -20,6 +24,24 @@ export class EvolutionService {
     userId: string,
     input: GetSummaryInput,
   ): Promise<SummaryPoint[]> {
+    if (
+      input.weeks !== undefined &&
+      (input.from !== undefined || input.to !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Cannot combine `weeks` with `from` or `to`. Use one or the other.',
+      );
+    }
+
+    if (input.weeks !== undefined) {
+      const from = new Date();
+      from.setDate(from.getDate() - input.weeks * 7);
+      return this.evolutionRepository.getSummary(userId, {
+        limit: input.limit,
+        from: from.toISOString().slice(0, 10),
+      });
+    }
+
     return this.evolutionRepository.getSummary(userId, input);
   }
 

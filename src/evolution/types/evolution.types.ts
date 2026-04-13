@@ -16,6 +16,7 @@ export interface GetSummaryInput {
   limit: number;
   from?: string;
   to?: string;
+  weeks?: number;
 }
 
 export interface SummaryPoint {
@@ -25,6 +26,7 @@ export interface SummaryPoint {
   bodyFatMethod: 'pollock' | 'navy' | null;
   leanMass: number | null;
   fatMass: number | null;
+  waistHipRatio: number | null;
 }
 
 export interface CompareResult {

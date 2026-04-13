@@ -29,6 +29,8 @@ export class EvolutionRepository {
         navyBodyFatPercentage: measurements.navyBodyFatPercentage,
         leanMass: measurements.leanMass,
         fatMass: measurements.fatMass,
+        waist: measurements.waist,
+        hip: measurements.hip,
       })
       .from(measurements)
       .where(and(...conditions))
@@ -38,6 +40,11 @@ export class EvolutionRepository {
     return result.map((r) => {
       const hasPollock = r.bodyFatPercentage != null;
       const hasNavy = r.navyBodyFatPercentage != null;
+
+      const waistHipRatio =
+        r.waist != null && r.hip != null
+          ? Math.round((parseFloat(r.waist) / parseFloat(r.hip)) * 10000) / 10000
+          : null;
 
       return {
         date: r.date,
@@ -50,6 +57,7 @@ export class EvolutionRepository {
         bodyFatMethod: (hasPollock ? 'pollock' : hasNavy ? 'navy' : null) as SummaryPoint['bodyFatMethod'],
         leanMass: r.leanMass ? parseFloat(r.leanMass) : null,
         fatMass: r.fatMass ? parseFloat(r.fatMass) : null,
+        waistHipRatio,
       };
     });
   }

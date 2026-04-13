@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   ParseIntPipe,
   DefaultValuePipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -37,21 +38,41 @@ export class EvolutionController {
     required: false,
     type: String,
     example: '2025-01-01',
+    description: 'ISO date filter (ignored when `weeks` is present)',
   })
   @ApiQuery({
     name: 'to',
     required: false,
     type: String,
     example: '2025-12-31',
+    description: 'ISO date filter (ignored when `weeks` is present)',
+  })
+  @ApiQuery({
+    name: 'weeks',
+    required: false,
+    type: Number,
+    example: 12,
+    description: 'Relative window ending today (1–104). Cannot be combined with `from` or `to`.',
   })
   @ApiResponse({ status: 200, description: 'Returns evolution summary' })
+  @ApiResponse({ status: 400, description: 'Cannot combine `weeks` with `from`/`to`' })
   getSummary(
     @Request() req: { user: { id: string } },
     @Query('limit', new DefaultValuePipe(30), ParseIntPipe) limit: number,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('weeks') weeksRaw?: string,
   ) {
-    return this.evolutionService.getSummary(req.user.id, { limit, from, to });
+    let weeks: number | undefined;
+
+    if (weeksRaw !== undefined) {
+      weeks = parseInt(weeksRaw, 10);
+      if (!Number.isInteger(weeks) || weeks < 1 || weeks > 104) {
+        throw new BadRequestException('`weeks` must be an integer between 1 and 104.');
+      }
+    }
+
+    return this.evolutionService.getSummary(req.user.id, { limit, from, to, weeks });
   }
 
   @Get('compare')
